@@ -1,0 +1,23 @@
+{
+  "type": "ApiConnection",
+  "description": "This trigger acts as the middleman between the database and the user. When the database is updated, the user receives a notification via email that informs them that the SQL database has updated.",
+  "inputs": {
+    "host": {
+      "connection": {
+        "referenceName": "servicebus-1"
+      }
+    },
+    "method": "get",
+    "path": "/@{encodeURIComponent(encodeURIComponent('emailtestcapstone'))}/messages/batch/head",
+    "queries": {
+      "queueType": "Main",
+      "maxMessageCount": 175
+    }
+  },
+  "recurrence": {
+    "interval": 60,
+    "frequency": "Second",
+    "timeZone": "Central Standard Time"
+  },
+  "splitOn": "@triggerBody()"
+}
