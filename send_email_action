@@ -1,0 +1,19 @@
+{
+  "type": "ApiConnection",
+  "inputs": {
+    "host": {
+      "connection": {
+        "referenceName": "smtp"
+      }
+    },
+    "method": "post",
+    "body": {
+      "From": "xlclcapstone@gmail.com",
+      "To": "xlcl_tx@hotmail.com",
+      "Subject": "capstone email test",
+      "Body": "<p class=\"editor-paragraph\">Database Updated</p>"
+    },
+    "path": "/SendEmailV3"
+  },
+  "runAfter": {}
+}
