@@ -18,6 +18,9 @@
 
 #include "driver/gpio.h"
 #include "driver/adc.h"
+
+#include "esp_adc/adc_oneshot.h"
+#include "esp_adc/adc_cali.h"
 //#include "esp_adc_cal.h"
 /*
  * TODO: In future improvement, compare sampleazureiotMODEL_ID macro definition
@@ -468,6 +471,28 @@ uint32_t ulHandleCommand( AzureIoTHubClientCommandRequest_t * pxMessage,
 }
 /*-----------------------------------------------------------*/
 
+#include <math.h>
+
+float ppm_curve(float A, float k, float y) {
+
+    float x = pow((y / A), (1 / k));
+
+    return x; // ppm
+
+}
+
+
+// PPM CURVE CONSTANTS - general form RsR0 = Ax^k 
+// CO: A = 19.5, k = -0.43
+
+
+
+
+//ADC CONFIGURATION 
+#define gases ADC1_CHANNEL_0
+#define ADC_WIDTH   ADC_WIDTH_BIT_12
+#define ADC_ATTEN   ADC_ATTEN_DB_11
+
 /**
  * @brief Implements the sample interface for generating Telemetry payload.
  */
@@ -476,12 +501,32 @@ uint32_t ulCreateTelemetry( uint8_t * pucTelemetryData,
                             uint32_t * ulTelemetryDataLength )
 {
 
+    // FLYING FISH MODULE COMPONENT VALUES //
+    float RL = 1000; // ohms 
+    float Vc = 5; // volts
+    float R0 = 1000; //ohms
+
+    // ANALOG READ AND CALIBRATE MQ2 Aout
+    int MQ2Raw = adc1_get_raw(gases);
+    float MQ2Aout = ((float)MQ2Raw / 4095) * 5;
+
+    // MQ2 DATA CONVERSION
+    float Rs = ((Vc - MQ2Aout) * RL) / MQ2Aout;
+
+    float y = Rs / R0;
+
+    float CO = ppm_curve(19.5, -0.43, y);
+
+
+
+
+
     // Example placeholder values for now
-    float temperature = 25.0f;     // Celsius
+    float temperature = MQ2Aout;     // Celsius
     float humidity = 50.0f;        // %
     float flammableGases = 120.0f; // ppm or arbitrary unit
     float tvoc = 0.45f;            // mg/m³ or arbitrary unit
-    float co = 3.2f;               // ppm
+    // float co = 3.2f;               // ppm
 
 
 
@@ -494,7 +539,7 @@ uint32_t ulCreateTelemetry( uint8_t * pucTelemetryData,
                           "\"TVOC\":%.2f,"
                           "\"CO\":%.2f"
                           "}",
-                          temperature, humidity, flammableGases, tvoc, co);
+                          temperature, humidity, flammableGases, tvoc, CO);
 
     if( ( result >= 0 ) && ( result < ulTelemetryDataSize ) )
     {

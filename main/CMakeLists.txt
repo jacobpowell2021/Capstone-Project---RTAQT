@@ -24,6 +24,7 @@ idf_component_register(
         azure-sdk-for-c
         azure-iot-middleware-freertos
         sample-azure-iot
-        driver           # for gpio.h
+        driver
+        esp_adc           # for gpio.h
         # esp_adc_cal     # uncomment if added via IDF Component Manager
 )
