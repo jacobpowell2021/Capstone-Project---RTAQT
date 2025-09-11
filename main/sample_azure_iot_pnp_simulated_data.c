@@ -17,10 +17,15 @@
 #include "task.h"
 
 #include "driver/gpio.h"
-#include "driver/adc.h"
+// #include "driver/adc.h"
 
 #include "esp_adc/adc_oneshot.h"
 #include "esp_adc/adc_cali.h"
+
+#include "adc_config.h"
+
+#include "driver/i2c_master.h"
+
 //#include "esp_adc_cal.h"
 /*
  * TODO: In future improvement, compare sampleazureiotMODEL_ID macro definition
@@ -471,6 +476,14 @@ uint32_t ulHandleCommand( AzureIoTHubClientCommandRequest_t * pxMessage,
 }
 /*-----------------------------------------------------------*/
 
+
+// PPM CURVE CONSTANTS - general form RsR0 = Ax^k 
+// CO: A = 19.5, k = -0.43
+
+
+
+
+
 #include <math.h>
 
 float ppm_curve(float A, float k, float y) {
@@ -481,17 +494,22 @@ float ppm_curve(float A, float k, float y) {
 
 }
 
+int analog_read(adc_oneshot_unit_handle_t adc_handle, adc_channel_t sensor) {
+    int raw = 0;
+    adc_oneshot_read(adc_handle, sensor, &raw);
 
-// PPM CURVE CONSTANTS - general form RsR0 = Ax^k 
-// CO: A = 19.5, k = -0.43
+    int voltageMV = 0;
+
+    adc_cali_raw_to_voltage(adc1_cali_handle, raw,&voltageMV);
+
+    return voltageMV;
+
+}
 
 
 
 
-//ADC CONFIGURATION 
-#define gases ADC1_CHANNEL_0
-#define ADC_WIDTH   ADC_WIDTH_BIT_12
-#define ADC_ATTEN   ADC_ATTEN_DB_11
+
 
 /**
  * @brief Implements the sample interface for generating Telemetry payload.
@@ -506,27 +524,30 @@ uint32_t ulCreateTelemetry( uint8_t * pucTelemetryData,
     float Vc = 5; // volts
     float R0 = 1000; //ohms
 
+
+
+
     // ANALOG READ AND CALIBRATE MQ2 Aout
-    int MQ2Raw = adc1_get_raw(gases);
-    float MQ2Aout = ((float)MQ2Raw / 4095) * 5;
+    int MQ2Aout = analog_read(adc1_handle, MQ2);
+
 
     // MQ2 DATA CONVERSION
-    float Rs = ((Vc - MQ2Aout) * RL) / MQ2Aout;
+    // float Rs = ((Vc - MQ2Aout) * RL) / MQ2Aout;
 
-    float y = Rs / R0;
+    // float y = Rs / R0;
 
-    float CO = ppm_curve(19.5, -0.43, y);
+    // float CO = ppm_curve(19.5, -0.43, y);
 
 
 
 
 
     // Example placeholder values for now
-    float temperature = MQ2Aout;     // Celsius
+    float temperature = 0.0f;     // Celsius
     float humidity = 50.0f;        // %
     float flammableGases = 120.0f; // ppm or arbitrary unit
     float tvoc = 0.45f;            // mg/m³ or arbitrary unit
-    // float co = 3.2f;               // ppm
+    float co = MQ2Aout;               // ppm
 
 
 

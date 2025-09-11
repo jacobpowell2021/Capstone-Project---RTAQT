@@ -20,6 +20,17 @@
 #include "freertos/task.h"
 #include "freertos/semphr.h"
 #include "nvs_flash.h"
+
+
+#include "driver/gpio.h"
+// #include "driver/adc.h"
+
+#include "esp_adc/adc_oneshot.h"
+#include "esp_adc/adc_cali.h"
+
+#include "adc_config.h" // i created this
+
+#define GAS_CHANNEL    ADC_CHANNEL_0
 /*-----------------------------------------------------------*/
 
 #define NR_OF_IP_ADDRESSES_TO_WAIT_FOR     1
@@ -304,6 +315,7 @@ static void initialize_time()
 
 void app_main( void )
 {
+    init_adc(); // i added this
     ESP_ERROR_CHECK( nvs_flash_init() );
     ESP_ERROR_CHECK( esp_netif_init() );
     ESP_ERROR_CHECK( esp_event_loop_create_default() );
