@@ -13,6 +13,7 @@ idf_component_register(
         "azure_iot_freertos_esp32_main.c"
         "sample_azure_iot_pnp.c"
         "sample_azure_iot_pnp_simulated_data.c"
+        "adc_config.c"
     INCLUDE_DIRS
         ${COMPONENT_INCLUDE_DIRS}  # now only valid directories
     REQUIRES
@@ -25,6 +26,7 @@ idf_component_register(
         azure-iot-middleware-freertos
         sample-azure-iot
         driver
-        esp_adc           # for gpio.h
+        esp_adc
+        #esp_driver_i2c       # for gpio.h
         # esp_adc_cal     # uncomment if added via IDF Component Manager
 )
