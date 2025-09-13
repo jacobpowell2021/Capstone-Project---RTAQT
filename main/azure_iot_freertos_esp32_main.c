@@ -29,6 +29,7 @@
 #include "esp_adc/adc_cali.h"
 
 #include "adc_config.h" // i created this
+#include "i2c_config.h"
 
 #define GAS_CHANNEL    ADC_CHANNEL_0
 /*-----------------------------------------------------------*/
@@ -316,6 +317,7 @@ static void initialize_time()
 void app_main( void )
 {
     init_adc(); // i added this
+    i2c_master_init(); // also this
     ESP_ERROR_CHECK( nvs_flash_init() );
     ESP_ERROR_CHECK( esp_netif_init() );
     ESP_ERROR_CHECK( esp_event_loop_create_default() );
