@@ -24,7 +24,12 @@
 
 #include "adc_config.h"
 
-#include "driver/i2c_master.h"
+#include "driver/i2c.h"
+#include "i2c_config.h"
+
+// #include "driver/i2c_master.h"
+
+// #include "esp_driver/i2c.h"
 
 //#include "esp_adc_cal.h"
 /*
@@ -484,6 +489,7 @@ uint32_t ulHandleCommand( AzureIoTHubClientCommandRequest_t * pxMessage,
 
 
 
+
 #include <math.h>
 
 float ppm_curve(float A, float k, float y) {
@@ -549,6 +555,15 @@ uint32_t ulCreateTelemetry( uint8_t * pucTelemetryData,
     float tvoc = 0.45f;            // mg/m³ or arbitrary unit
     float co = MQ2Aout;               // ppm
 
+    // i2c read temp humidity 
+
+    esp_err_t ret = sensor_read(&temperature, &humidity);
+    if (ret == ESP_OK) {
+        ESP_LOGI("SENSOR", "Temperature: %.2f °C, Humidity: %.2f %%", temperature, humidity);
+    } else {
+        ESP_LOGE("SENSOR", "Failed to read sensor");
+    }
+
 
 
     // Format JSON with fields in required order
@@ -560,7 +575,7 @@ uint32_t ulCreateTelemetry( uint8_t * pucTelemetryData,
                           "\"TVOC\":%.2f,"
                           "\"CO\":%.2f"
                           "}",
-                          temperature, humidity, flammableGases, tvoc, CO);
+                          temperature, humidity, flammableGases, tvoc, co);
 
     if( ( result >= 0 ) && ( result < ulTelemetryDataSize ) )
     {
