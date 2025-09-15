@@ -143,7 +143,7 @@ esp_err_t sensor_read(float *temperature, float *humidity)
     ESP_LOGI(TAG, "Step 4: Reading measurement data...");
 
     // Step 4: Read 6 measurement bytes
-    uint8_t data[6];
+    uint8_t data[8];
     ret = i2c_master_read_slave(SENSOR_ADDR, data, 6);
     if (ret != ESP_OK) {
         ESP_LOGE(TAG, "Step 4: Data read failed: %s", esp_err_to_name(ret));
@@ -155,12 +155,11 @@ esp_err_t sensor_read(float *temperature, float *humidity)
     // i2c_master_read_slave(SENSOR_ADDR, &crc, 1);
 
     // Step 5: Convert raw data to temperature and humidity
-    uint32_t raw_humidity = (data[0] << 12) | (data[1] << 4) | (data[2] >> 4);
-    uint32_t raw_temperature = ((data[2] & 0x0F) << 16) | (data[3] << 8) | data[4];
+    uint32_t raw_humidity = ((data[1] << 12) | (data[2] << 4) | (data[3] >> 4)) & 0xFFFFF;
+    uint32_t raw_temperature = (((data[3] & 0x0F) << 16) | (data[4] << 8) | data[5]) & 0xFFFFF;
 
     *humidity = raw_humidity / (float)(1 << 20) * 100.0f;      // %RH
     *temperature = raw_temperature / (float)(1 << 20) * 200.0f - 50.0f; // °C
 
     return ESP_OK;
 }
-
