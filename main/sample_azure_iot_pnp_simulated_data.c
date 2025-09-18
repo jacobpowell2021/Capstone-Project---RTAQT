@@ -500,9 +500,14 @@ float ppm_curve(float A, float k, float y) {
 
 }
 
+#define MQ2TAG "MQ2_SENSOR"
+#define MQ7TAG "MQ7_SENSOR"
+
 int analog_read(adc_oneshot_unit_handle_t adc_handle, adc_channel_t sensor) {
     int raw = 0;
     adc_oneshot_read(adc_handle, sensor, &raw);
+
+    // ESP_LOGI(MQ2TAG, "MQ2 raw analog output: %d", raw);
 
     int voltageMV = 0;
 
@@ -511,6 +516,7 @@ int analog_read(adc_oneshot_unit_handle_t adc_handle, adc_channel_t sensor) {
     return voltageMV;
 
 }
+
 
 
 
@@ -536,13 +542,47 @@ uint32_t ulCreateTelemetry( uint8_t * pucTelemetryData,
     // ANALOG READ AND CALIBRATE MQ2 Aout
     int MQ2Aout = analog_read(adc1_handle, MQ2);
 
+    ESP_LOGI(MQ2TAG, "MQ2 calibrated analog output (mv): %d", MQ2Aout);
 
-    // MQ2 DATA CONVERSION
-    // float Rs = ((Vc - MQ2Aout) * RL) / MQ2Aout;
 
-    // float y = Rs / R0;
+    float MQ2Aoutf = (float)MQ2Aout / 1000.0; // mv to V 
 
-    // float CO = ppm_curve(19.5, -0.43, y);
+    ESP_LOGI(MQ2TAG, "MQ2 calibrated analog output (V): %0.2f", MQ2Aoutf);
+
+
+
+    float Rs = ((Vc - MQ2Aoutf) * RL) / MQ2Aoutf;
+
+    ESP_LOGI(MQ2TAG, "Rs: %0.2f", Rs);
+
+
+
+    float y = Rs / R0;
+
+    ESP_LOGI(MQ2TAG, "Y calculation: %0.2f", y);
+
+    float flammableGases = ppm_curve(19.5, -0.43, y);
+
+    ESP_LOGI(MQ2TAG, "flammable gas (ppm): %0.2f", flammableGases);
+
+
+    //////////////////////
+
+    int MQ7Aout = analog_read(adc1_handle, MQ7);
+
+    float MQ7Aoutf = (float)MQ7Aout / 1000.0; // mv to V 
+
+    float Rs2 = ((Vc - MQ7Aoutf) * RL) / MQ7Aoutf;
+
+    float y2 = Rs2 / R0;
+
+    float co = ppm_curve(19.5, -0.43, y2);
+
+    ESP_LOGI(MQ7TAG, "MQ7 calibrated analog output (mv): %d", MQ7Aout);
+
+    ESP_LOGI(MQ7TAG, "co (ppm): %0.2f", co);
+
+
 
 
 
@@ -551,17 +591,17 @@ uint32_t ulCreateTelemetry( uint8_t * pucTelemetryData,
     // Example placeholder values for now
     float temperature = 0.0f;     // Celsius
     float humidity = 50.0f;        // %
-    float flammableGases = 120.0f; // ppm or arbitrary unit
+    // float flammableGases = 120.0f; // ppm or arbitrary unit
     float tvoc = 0.45f;            // mg/m³ or arbitrary unit
-    float co = MQ2Aout;               // ppm
+    // float co = MQ2Aout;               // ppm
 
     // i2c read temp humidity 
 
     esp_err_t ret = sensor_read(&temperature, &humidity);
     if (ret == ESP_OK) {
-        ESP_LOGI("SENSOR", "Temperature: %.2f °C, Humidity: %.2f %%", temperature, humidity);
+        ESP_LOGI("ADAFRUIT_SENSOR", "Temperature: %.2f °C, Humidity: %.2f %%", temperature, humidity);
     } else {
-        ESP_LOGE("SENSOR", "Failed to read sensor");
+        ESP_LOGE("ADA_FRUIT_SENSOR", "Failed to read sensor");
     }
 
 

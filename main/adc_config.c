@@ -10,7 +10,7 @@ static const char *TAG = "ADC_CONFIG";
 
 adc_oneshot_unit_handle_t adc1_handle;  // define the global handle
 adc_channel_t MQ2 = ADC_CHANNEL_0;
-adc_channel_t MQ7 = ADC_CHANNEL_1;
+adc_channel_t MQ7 = ADC_CHANNEL_3;
 
 adc_cali_handle_t adc1_cali_handle = NULL;
 
@@ -31,6 +31,8 @@ void init_adc(void) {
         .atten = ADC_ATTEN_DB_11,
     };
     ESP_ERROR_CHECK(adc_oneshot_config_channel(adc1_handle, MQ2, &config));
+
+    ESP_ERROR_CHECK(adc_oneshot_config_channel(adc1_handle, MQ7, &config));
 
     // adc calibration 
 
