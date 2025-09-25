@@ -502,6 +502,8 @@ float ppm_curve(float A, float k, float y) {
 
 #define MQ2TAG "MQ2_SENSOR"
 #define MQ7TAG "MQ7_SENSOR"
+#define TAG_RSOC "TAG_RSOC"
+#define TVOC_TAG "TVOC_TAG"
 
 int analog_read(adc_oneshot_unit_handle_t adc_handle, adc_channel_t sensor) {
     int raw = 0;
@@ -530,6 +532,7 @@ uint32_t ulCreateTelemetry( uint8_t * pucTelemetryData,
                             uint32_t ulTelemetryDataSize,
                             uint32_t * ulTelemetryDataLength )
 {
+    i2c_scan();
 
     // FLYING FISH MODULE COMPONENT VALUES //
     float RL = 1000; // ohms 
@@ -542,24 +545,24 @@ uint32_t ulCreateTelemetry( uint8_t * pucTelemetryData,
     // ANALOG READ AND CALIBRATE MQ2 Aout
     int MQ2Aout = analog_read(adc1_handle, MQ2);
 
-    ESP_LOGI(MQ2TAG, "MQ2 calibrated analog output (mv): %d", MQ2Aout);
+    // ESP_LOGI(MQ2TAG, "MQ2 calibrated analog output (mv): %d", MQ2Aout);
 
 
     float MQ2Aoutf = (float)MQ2Aout / 1000.0; // mv to V 
 
-    ESP_LOGI(MQ2TAG, "MQ2 calibrated analog output (V): %0.2f", MQ2Aoutf);
+    // ESP_LOGI(MQ2TAG, "MQ2 calibrated analog output (V): %0.2f", MQ2Aoutf);
 
 
 
     float Rs = ((Vc - MQ2Aoutf) * RL) / MQ2Aoutf;
 
-    ESP_LOGI(MQ2TAG, "Rs: %0.2f", Rs);
+    // ESP_LOGI(MQ2TAG, "Rs: %0.2f", Rs);
 
 
 
     float y = Rs / R0;
 
-    ESP_LOGI(MQ2TAG, "Y calculation: %0.2f", y);
+    // ESP_LOGI(MQ2TAG, "Y calculation: %0.2f", y);
 
     float flammableGases = ppm_curve(19.5, -0.43, y);
 
@@ -578,7 +581,7 @@ uint32_t ulCreateTelemetry( uint8_t * pucTelemetryData,
 
     float co = ppm_curve(19.5, -0.43, y2);
 
-    ESP_LOGI(MQ7TAG, "MQ7 calibrated analog output (mv): %d", MQ7Aout);
+    // ESP_LOGI(MQ7TAG, "MQ7 calibrated analog output (mv): %d", MQ7Aout);
 
     ESP_LOGI(MQ7TAG, "co (ppm): %0.2f", co);
 
@@ -592,7 +595,7 @@ uint32_t ulCreateTelemetry( uint8_t * pucTelemetryData,
     float temperature = 0.0f;     // Celsius
     float humidity = 50.0f;        // %
     // float flammableGases = 120.0f; // ppm or arbitrary unit
-    float tvoc = 0.45f;            // mg/m³ or arbitrary unit
+    float tvoc = 0.0f;            // mg/m³ or arbitrary unit
     // float co = MQ2Aout;               // ppm
 
     // i2c read temp humidity 
@@ -603,6 +606,26 @@ uint32_t ulCreateTelemetry( uint8_t * pucTelemetryData,
     } else {
         ESP_LOGE("ADA_FRUIT_SENSOR", "Failed to read sensor");
     }
+ 
+
+    uint8_t rsoc;
+
+
+    //if (bq27210_get_rsoc(&rsoc) == ESP_OK) {
+    //    ESP_LOGI(TAG_RSOC, "Battery RSOC: %d %%", rsoc);
+    //} else {
+    //    ESP_LOGE(TAG_RSOC, "Failed to read RSOC");
+    //}
+
+
+    esp_err_t tvoc_ret = read_tvoc(&tvoc);
+    if (tvoc_ret == ESP_OK) {
+        ESP_LOGI(TVOC_TAG, "TVOC concentration: %.2f ppb", tvoc);
+    } else {
+        ESP_LOGE(TVOC_TAG, "Failed to read TVOC (err=0x%x: %s)",
+        tvoc_ret, esp_err_to_name(tvoc_ret));
+    }
+
 
 
 

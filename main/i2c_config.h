@@ -48,6 +48,25 @@ esp_err_t i2c_master_write_slave(uint8_t slave_addr, uint8_t *data_wr, size_t si
  */
 esp_err_t i2c_master_read_slave(uint8_t slave_addr, uint8_t *data_rd, size_t size);
 
+/**
+ * @brief Read Relative State-of-Charge (RSOC) from bq27210 battery
+ *
+ * @param percent Pointer to uint8_t to store RSOC in %
+ * @return ESP_OK on success, otherwise an ESP error code
+ */
+esp_err_t bq27210_get_rsoc(uint8_t *percent);
+
+/**
+ * @brief Scan the I2C bus for connected devices and log their addresses
+ */
+void i2c_scan(void);
+
+// Function prototype to read TVOC concentration (ppb)
+esp_err_t read_tvoc(float *tvoc_ppb);
+
+
+
+
 #ifdef __cplusplus
 }
 #endif
