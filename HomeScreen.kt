@@ -4,22 +4,44 @@ import android.Manifest
 import android.content.pm.PackageManager
 import android.os.Build
 import android.util.Log
-import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.*
-import androidx.compose.material3.NavigationBar
-import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Info
-import androidx.compose.material.icons.filled.List
-import androidx.compose.material.icons.filled.ShoppingCart
-import androidx.compose.runtime.*
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Icon
+import androidx.compose.material3.NavigationBar
+import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.NavigationBarItemDefaults
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -37,14 +59,14 @@ import com.example.airqualitytracker.ui.theme.Maroon
 import com.google.accompanist.systemuicontroller.rememberSystemUiController
 import kotlinx.coroutines.delay
 import java.time.LocalDateTime
-import java.time.OffsetDateTime
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 
 @Composable
-fun HomeScreen(navController: NavController, vm: LatestChartViewModel = viewModel(), vmp: PredictionChartViewModel = viewModel()) {
+fun HomeScreen(navController: NavController, vm: LatestChartViewModel = viewModel()) {
     val systemUiController = rememberSystemUiController()
+
     LaunchedEffect(Unit) {
         delay(1000L)
         vm.fetch()
@@ -59,7 +81,7 @@ fun HomeScreen(navController: NavController, vm: LatestChartViewModel = viewMode
             darkIcons = true // false = white icons (good for dark bars)
         )
     }
-    // For current local time (not database)
+    // For current local time
     val now = LocalDateTime.now()
     val currentZone = now.atZone(ZoneId.systemDefault())
 
@@ -89,7 +111,7 @@ fun HomeScreen(navController: NavController, vm: LatestChartViewModel = viewMode
         }
     }
 
-    // --- MQTT state ---
+    // --- state ---
     val temperatureState = remember { mutableStateOf("...") }
     val humidityState    = remember { mutableStateOf("...") }
     val particleState    = remember { mutableStateOf("...") }
@@ -98,16 +120,15 @@ fun HomeScreen(navController: NavController, vm: LatestChartViewModel = viewMode
     val jsonState        = remember { mutableStateOf("...") }
     var showDialog by remember { mutableStateOf(false) }
 
-    MqttManager.handleTemperatureUpdate(context, temperatureState) // optional
 
-    val tempFloat = temperatureState.value.toFloatOrNull()
-    val humidityFloat = humidityState.value.toFloatOrNull()
+    val tempFloat = vm.tempPoints.lastOrNull()?.y
+    val humidityFloat = vm.humidityPoints.lastOrNull()?.y
 
     LaunchedEffect(tempFloat) {
         if (tempFloat != null && tempFloat < 33) {
             showSystemNotification(context, "Low Temperature Alert", "Temperature dropped below 33°F")
-        } else if (tempFloat != null && tempFloat > 100) {
-            showSystemNotification(context, "High Temperature Alert", "Temperature Above 100°F")
+        } else if (tempFloat != null && tempFloat > 80) {
+            showSystemNotification(context, "High Temperature Alert", "Temperature Above 80°F")
         }
     }
     LaunchedEffect(humidityFloat) {
@@ -225,18 +246,11 @@ fun HomeScreen(navController: NavController, vm: LatestChartViewModel = viewMode
                 verticalArrangement = Arrangement.Center
 
             ) {
-                var checkedTemperature by remember { mutableStateOf(true) }
-                var checkedHumidity    by remember { mutableStateOf(true) }
-                var checkedParticle    by remember { mutableStateOf(true) }
-                var checkedTVOC        by remember { mutableStateOf(true) }
-                var checkedCO          by remember { mutableStateOf(true) }
-
                 TelemetryRow(
                     label = "Temperature:",
                     value = vm.tempPoints.lastOrNull()?.y.toString(),
                     unit  = "°F",
-                    checked = checkedTemperature
-                ) {}
+                )
 
                 Spacer(Modifier.height(16.dp))
 
@@ -244,8 +258,7 @@ fun HomeScreen(navController: NavController, vm: LatestChartViewModel = viewMode
                     label = "Humidity:",
                     value = vm.humidityPoints.lastOrNull()?.y.toString(),
                     unit  = "%",
-                    checked = checkedHumidity
-                ) {}
+                )
 
                 Spacer(Modifier.height(16.dp))
 
@@ -253,11 +266,7 @@ fun HomeScreen(navController: NavController, vm: LatestChartViewModel = viewMode
                     label = "Flammable Gases:",
                     value = vm.flammablePoints.lastOrNull()?.y.toString(),
                     unit  = "%",
-                    checked = checkedParticle
-                ) {
-                    checkedParticle = it
-                    MqttManager.publish("sensor/particle_switch", it.toString())
-                }
+                )
 
                 Spacer(Modifier.height(16.dp))
 
@@ -265,11 +274,7 @@ fun HomeScreen(navController: NavController, vm: LatestChartViewModel = viewMode
                     label = "TVOC:",
                     value = vm.tvocPoints.lastOrNull()?.y.toString(),
                     unit  = "ppm",
-                    checked = checkedTVOC
-                ) {
-                    checkedTVOC = it
-                    MqttManager.publish("sensor/TVOC_switch", it.toString())
-                }
+                )
 
                 Spacer(Modifier.height(16.dp))
 
@@ -277,11 +282,7 @@ fun HomeScreen(navController: NavController, vm: LatestChartViewModel = viewMode
                     label = "CO:",
                     value = vm.coPoints.lastOrNull()?.y.toString(),
                     unit  = "ppm",
-                    checked = checkedCO
-                ) {
-                    checkedCO = it
-                    MqttManager.publish("sensor/CO_Switch", it.toString())
-                }
+                )
 
                 Spacer(Modifier.height(16.dp))
 
@@ -289,11 +290,7 @@ fun HomeScreen(navController: NavController, vm: LatestChartViewModel = viewMode
                     label = "Battery Life: ",
                     value = vm.latestBattery.toString(),
                     unit  = "%",
-                    checked = checkedCO
-                ) {
-                    checkedCO = it
-                    MqttManager.publish("sensor/CO_Switch", it.toString())
-                }
+                )
 
                 Spacer(Modifier.height(16.dp))
 
@@ -301,11 +298,7 @@ fun HomeScreen(navController: NavController, vm: LatestChartViewModel = viewMode
                     label = "Time Last Checked:",
                     value = latestTime.first, // "05:40:01"
                     unit  = latestTime.second, // "PM" or "AM"
-                    checked = checkedCO
-                ) {
-                    checkedCO = it
-                    MqttManager.publish("sensor/CO_Switch", it.toString())
-                }
+                )
 
                 Button(
                     onClick = {
@@ -341,8 +334,6 @@ private fun TelemetryRow(
     label: String,
     value: String,
     unit: String? = null,
-    checked: Boolean,
-    onCheckedChange: (Boolean) -> Unit
 
 ) {
     val shape = RoundedCornerShape(12.dp)
@@ -419,249 +410,3 @@ fun LoadingHomeOverlay(
         }
     }
 }
-
-//Old Code that still works. DO NOT DELETE
-/*import android.util.Log
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.Button
-import androidx.compose.material3.Switch
-import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
-import androidx.navigation.NavController
-import android.widget.TextView
-import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.SwitchDefaults
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.ui.graphics.Color
-import com.example.airqualitytracker.ui.theme.Maroon
-import kotlin.text.toFloatOrNull
-//for push notifications
-import android.Manifest
-import android.content.pm.PackageManager
-import android.os.Build
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.ui.platform.LocalContext
-import androidx.core.content.ContextCompat
-import com.example.airqualitytracker.MqttManager.handleTemperatureUpdate
-import java.time.LocalDateTime
-import java.time.format.DateTimeFormatter
-
-
-@Composable
-fun HomeScreen(navController: NavController){//have to pass navController to each screen in order to recognize route
-        val context = LocalContext.current
-    val requestPermissionLauncher = rememberLauncherForActivityResult(//check for request permission
-        contract = ActivityResultContracts.RequestPermission(),
-        onResult = { isGranted: Boolean ->
-            if (!isGranted) {
-                Log.d("Notification", "Permission denied")
-            }
-        }
-    )
-    // Check & ask for permission if not granted
-    LaunchedEffect(Unit) {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            val permissionCheck = ContextCompat.checkSelfPermission(
-                context,
-                Manifest.permission.POST_NOTIFICATIONS
-            )
-            if (permissionCheck != PackageManager.PERMISSION_GRANTED) {
-                requestPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
-            }
-        }
-    }
-        val temperatureState = remember { mutableStateOf("...") }
-        val humidityState = remember { mutableStateOf("...") }
-        val particleState = remember { mutableStateOf("...") }
-        var showDialog by remember { mutableStateOf(false) }
-
-        handleTemperatureUpdate(context,temperatureState)//debugging
-        // Trying to convert temperature string to Float to check for alerts
-        val tempFloat = temperatureState.value.toFloatOrNull()
-        val humidityFloat = humidityState.value.toFloatOrNull()
-
-        // Show dialog if temp < 5
-        LaunchedEffect(tempFloat) {
-            if (tempFloat != null && tempFloat < 33) {//alerts of low freezing temperature
-                showSystemNotification(context, "Low Temperature Alert", "Temperature dropped below 33°F")
-            }
-            else if (tempFloat != null && tempFloat > 100){//alerts of high temperature
-                showSystemNotification(context, "High Temperature Alert", "Temperature Above 100°F")
-
-            }
-        }
-        LaunchedEffect(humidityFloat) {
-            if (humidityFloat != null && humidityFloat > 60) {//alerts of low freezing temperature
-                showSystemNotification(context, "High Humidity", "Humidity is above 60%")
-            }
-        }
-
-        // Listen for MQTT values
-        LaunchedEffect(Unit) {
-            MqttManager.startListening(temperatureState, humidityState, particleState)
-        }
-
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(Color.Black)
-        ) { Column (
-            Modifier.fillMaxSize()
-                .padding(vertical = 30.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Top)
-        {
-            Text(
-                text = "Home",
-                color = Color.White,
-                fontSize = 30.sp
-            )
-        }
-            Column(
-                Modifier.fillMaxSize(),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Center
-
-            ) {
-
-
-                var checkedTemperature by remember { mutableStateOf(true) }//(3/4/25)adds variables for individual states of switches
-                var checkedHumidity by remember { mutableStateOf(true) }
-                var checkedParticle by remember { mutableStateOf(true) }
-
-                Row (
-                        modifier = Modifier//spaces the two text boxes and switch evenly
-                            .fillMaxWidth()
-                            .padding(horizontal = 30.dp),
-                    horizontalArrangement = Arrangement.SpaceEvenly,
-                    verticalAlignment = Alignment.CenterVertically
-                ){//separates data from switch
-
-                    Text(//This text will take the the server data and display it
-                        text = "Temperature:",
-                        color = Color.White,
-                        fontSize = 20.sp,
-                        modifier = Modifier.padding(8.dp)
-                    )
-                    Text(
-                        text = "${temperatureState.value}°F",
-                        color = Color.White
-                    )
-                    Switch(//adds switch to the home screen for turning off and on of sensors. NOTE(2/24/2025): Still have to implement for the switch to communicate that to Server COMPLETED
-                        //have to add memory outside from past login
-                        checked = checkedTemperature,
-                        colors = SwitchDefaults.colors(
-                            checkedTrackColor = Color.Green
-                        ),
-                        onCheckedChange = {
-                            var currentTime = LocalDateTime.now().format(DateTimeFormatter.ofPattern("HH:mm:ss"))
-                            checkedTemperature = it
-                            MqttManager.publish("sensor/temperature_switch",it.toString() + " $currentTime")//publishes the boolean to this topic
-                        }
-                    )
-                }
-                Row (
-                    modifier = Modifier//spaces the two text boxes and switch evenly
-                        .fillMaxWidth()
-                        .padding(horizontal = 30.dp),
-                    horizontalArrangement = Arrangement.SpaceEvenly,
-                    verticalAlignment = Alignment.CenterVertically
-                ){//separates text, data and switch
-                    Text(//This text will take the the server data and display it
-                        text = "Humidity:",
-                        color = Color.White,
-                        fontSize = 20.sp,
-                        modifier = Modifier.padding(8.dp)
-                    )
-                    Text(
-                        text = "${humidityState.value}%",
-                        color = Color.White
-                    )
-                    Switch(//adds switch to the home screen for turning off and on of sensors. NOTE: Still have to implement for the switch to communicate that to Server
-                        checked = checkedHumidity,
-                        colors = SwitchDefaults.colors(
-                            checkedTrackColor = Color.Green
-                        ),
-                        onCheckedChange = {
-                            checkedHumidity = it
-                            MqttManager.publish("sensor/Humidity_switch",it.toString())//publishes the boolean to this topic
-                        }
-                    )
-                }
-                Row (
-                    modifier = Modifier//spaces the two text boxes and switch evenly
-                        .fillMaxWidth()
-                        .padding(horizontal = 30.dp),
-                    horizontalArrangement = Arrangement.SpaceEvenly,
-                    verticalAlignment = Alignment.CenterVertically
-                ){//separates text, data and switch
-                    Text(//This text will take the the server data and display it
-                        text = "Particle:",
-                        color = Color.White,
-                        fontSize = 20.sp,
-                        modifier = Modifier.padding(8.dp)
-                    )
-                    Text(
-                        text = "${particleState.value}%",
-                        color = Color.White
-                    )
-                    Switch(//adds switch to the home screen for turning off and on of sensors. NOTE: Still have to implement for the switch to communicate that to Server
-                        checked = checkedParticle,
-                        colors = SwitchDefaults.colors(
-                            checkedTrackColor = Color.Green
-                        ),
-                        onCheckedChange = {
-                            checkedParticle = it
-                            MqttManager.publish("sensor/particle_switch",it.toString())//publishes the boolean to this topic
-                        }
-                    )
-                }
-            }
-            if (showDialog) {//detects the change in showDialog for temperature
-                androidx.compose.material3.AlertDialog(
-                    onDismissRequest = { showDialog = false },
-                    title = { Text("Low Temperature Alert") },
-                    text = { Text("Warning: Temperature is below 33°F!") },
-                    confirmButton = {
-                        Button(onClick = { showDialog = false }) {
-                            Text("OK")
-                        }
-                    }
-                )
-            }
-            Button(onClick = {
-                navController.navigate(Routes.NavigationScreen)
-            },
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = Maroon,         // Background
-                    contentColor = Color.White       // Text color
-                ),
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .fillMaxWidth()
-
-            ) {
-                Text(
-                    text = "Go to Navigation Screen",
-                    color = Color.White,
-                )
-            }
-        }
-    }
-*/

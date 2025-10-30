@@ -2,11 +2,34 @@ package com.example.airqualitytracker
 
 import androidx.compose.animation.Crossfade
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material3.Button
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExposedDropdownMenuBox
+import androidx.compose.material3.ExposedDropdownMenuDefaults
+import androidx.compose.material3.MenuDefaults
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextField
+import androidx.compose.material3.TextFieldDefaults
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -188,146 +211,3 @@ fun PredictionChartsSection(vm: PredictionChartViewModel = viewModel()) {
         }
     }
 }
-
-
-//Working Prediction Screen
-/*package com.example.airqualitytracker
-
-import com.example.airqualitytracker.PredictionChartViewModel
-import androidx.compose.foundation.layout.*
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.unit.dp
-import androidx.lifecycle.viewmodel.compose.viewModel
-import co.yml.charts.axis.AxisData
-import co.yml.charts.ui.linechart.LineChart
-import co.yml.charts.ui.linechart.model.Line
-import co.yml.charts.ui.linechart.model.LineChartData
-import co.yml.charts.ui.linechart.model.LinePlotData
-import android.util.Log
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
-import co.yml.charts.common.model.Point
-import co.yml.charts.ui.linechart.model.IntersectionPoint
-import co.yml.charts.ui.linechart.model.LineStyle
-import co.yml.charts.ui.linechart.model.SelectionHighlightPoint
-import co.yml.charts.ui.linechart.model.SelectionHighlightPopUp
-import co.yml.charts.ui.linechart.model.ShadowUnderLine
-import com.example.airqualitytracker.ui.theme.Maroon
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun PredictionChartsSection(vm: PredictionChartViewModel = viewModel()) {
-    var daysText by remember { mutableStateOf("3.0") }
-    // Remember scroll state
-    val scrollState = rememberScrollState()
-    Column (
-        modifier = Modifier
-            .verticalScroll(scrollState)
-
-    ){
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            OutlinedTextField(
-                value = daysText,
-                onValueChange = { daysText = it },
-                label = { Text("days") },
-                singleLine = true,
-                colors = TextFieldDefaults.textFieldColors(
-                    focusedTextColor = Color.White,
-                    unfocusedTextColor = Color.White,
-                    containerColor = Maroon,                  // Background
-                    focusedIndicatorColor = Color.White,           // Underline when focused
-                    unfocusedIndicatorColor = Color.White,         // Underline when not focused
-                    focusedLabelColor = Color.White,               // Label color when active
-                    unfocusedLabelColor = Color.White,          //label color when inactive
-                    cursorColor = Color.White,                      // Cursor color
-                )
-
-            )
-            Button(onClick = { daysText.toFloatOrNull()?.let(vm::fetchAndBuild) }) {
-                Text(if (vm.isLoading.value) "Loading…" else "Fetch")
-            }
-
-        }
-        Text("points: ${vm.tempPoints.size}", color = Color.White)
-        if (vm.tempPoints.isNotEmpty()) {
-            val first = vm.tempPoints.first()
-            val last  = vm.tempPoints.last()
-            Text("first: x=${first.x}, y=${first.y}", color = Color.White)
-            Text("last:  x=${last.x},  y=${last.y}",  color = Color.White)
-        }
-
-
-        vm.error.value?.let { Text("Error: $it", color = Color(0xFFFFB4A9)) }
-// Temperature
-        MetricLineChart(
-            title = "Temperature (°F)",
-            points = vm.tempPoints,
-            color = Color.Red,
-            fixedYRange = 60f..100f,                 // your request: force 60..100 while keeping line invisible
-            xLabels = vm.xLabels,                    // or null if you don't want labels
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(220.dp)
-        )
-
-        Spacer(Modifier.height(16.dp))
-// Humidity
-        MetricLineChart(
-            title = "Humidity",
-            points = vm.humidityPoints,
-            color = Color.Blue,
-            fixedYRange = 60f..100f,
-            xLabels = vm.xLabels,                    // or null if you don't want labels
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(220.dp)
-        )
-
-        Spacer(Modifier.height(16.dp))
-
-// Flammable
-        MetricLineChart(
-            title = "Flammable Gas",
-            points = vm.flammablePoints,
-            color = Color.Blue,
-            fixedYRange = 60f..100f,
-            xLabels = vm.xLabels,                    // or null if you don't want labels
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(220.dp)
-        )
-
-        Spacer(Modifier.height(16.dp))
-
-// TVOC
-        MetricLineChart(
-            title = "TVOC",
-            points = vm.tvocPoints,
-            color = Color.Green,
-            fixedYRange = 0f..1f,
-            xLabels = vm.xLabels,                  // or null if you don't want labels
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(220.dp)
-        )
-
-        Spacer(Modifier.height(16.dp))
-
-//CO
-        MetricLineChart(
-            title = "CO",
-            points = vm.coPoints,
-            color = Color.Yellow,
-            fixedYRange = 0f..1f,
-            xLabels = vm.xLabels,                    // or null if you don't want labels
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(220.dp)
-        )
-    }
-
-}
-*/

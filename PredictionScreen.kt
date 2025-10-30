@@ -1,33 +1,42 @@
 package com.example.airqualitytracker
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.horizontalScroll
-import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Info
-import androidx.compose.material.icons.filled.List
-import androidx.compose.material.icons.filled.ShoppingCart
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material3.Icon
+import androidx.compose.material3.NavigationBar
+import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.NavigationBarItemDefaults
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import androidx.navigation.compose.currentBackStackEntryAsState
 import com.example.airqualitytracker.ui.theme.Black
 import com.example.airqualitytracker.ui.theme.Maroon
-import com.example.airqualitytracker.PredictionChartViewModel
 import kotlinx.coroutines.delay
 
 @Composable
@@ -131,25 +140,7 @@ fun PredictionScreen(
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
                 Text("Fetch Prediction (Azure Function)", color = Color.White)
-
                 PredictionChartsSection()
-                /*
-                Button(
-                    onClick = {
-                        vm.fetchPrediction(daysText.toFloat())
-                    },
-                    colors = ButtonDefaults.buttonColors(containerColor = Maroon, contentColor = Color.White)
-                ) {
-                    Text("Fetch Prediction")
-                }
-
-
-                Text("Temperature (first 5): ${vm.temperature.value.take(5).joinToString()}", color = Color.White)
-                Text("Flammable (first 5): ${vm.flammable.value.take(5).joinToString()}", color = Color.White)
-                Text("Humidity (first 5): ${vm.humidity.value.take(5).joinToString()}", color = Color.White)
-                Text("TVOC (first 5): ${vm.tvoc.value.take(5).joinToString()}", color = Color.White)
-                Text("CO (first 5): ${vm.co.value.take(5).joinToString()}", color = Color.White)*/
-
             }
         }
     }

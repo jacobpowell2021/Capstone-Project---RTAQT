@@ -2,17 +2,14 @@ package com.example.airqualitytracker
 
 import android.util.Log
 import androidx.compose.runtime.mutableStateListOf
-import com.google.gson.Gson
-import com.google.gson.JsonElement
-import com.google.gson.JsonObject
 import androidx.compose.runtime.mutableStateOf
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import co.yml.charts.common.model.Point
-import com.example.airqualitytracker.DaysRequest
-import com.example.airqualitytracker.Http
+import com.google.gson.Gson
+import com.google.gson.JsonElement
+import com.google.gson.JsonObject
 import kotlinx.coroutines.launch
-import com.example.airqualitytracker.PredictionResponse
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 

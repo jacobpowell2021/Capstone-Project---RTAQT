@@ -7,7 +7,6 @@ import android.content.Context
 import android.os.Build
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
-import com.example.airqualitytracker.R
 
 fun showSystemNotification(context: Context, title: String, message: String) {
     val channelId = "sensor_alerts"

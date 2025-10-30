@@ -62,14 +62,6 @@ class MainActivity : ComponentActivity() {
                 Log.d("MQTT", "Received Topic: $topic: $message")
             }
         }
-
-        // Connect to the broker.  For initial testing and connection purposes
-        /*MqttManager.connect(
-            username = "Computer",
-            password = "I1mdb\$pm",
-            topic = "Temperature"
-        )*/
-
     }
 }
 

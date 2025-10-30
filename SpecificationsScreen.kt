@@ -1,23 +1,36 @@
 package com.example.airqualitytracker
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Info
-import androidx.compose.material.icons.filled.List
-import androidx.compose.material.icons.filled.ShoppingCart
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.NavigationBar
+import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.NavigationBarItemDefaults
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import androidx.navigation.compose.currentBackStackEntryAsState
 import com.example.airqualitytracker.ui.theme.Black
@@ -136,130 +149,3 @@ fun SpecificationScreen(
         }
     }
 }
-
-
-/*package com.example.airqualitytracker
-
-import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Home
-import androidx.compose.material.icons.filled.Info
-import androidx.compose.material.icons.filled.List
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Icon
-import androidx.compose.material3.NavigationBar
-import androidx.compose.material3.NavigationBarItem
-import androidx.compose.material3.NavigationBarItemDefaults
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.unit.dp
-import androidx.lifecycle.viewmodel.compose.viewModel
-import androidx.navigation.NavController
-import androidx.navigation.compose.currentBackStackEntryAsState
-import com.example.airqualitytracker.ui.theme.Black
-import com.example.airqualitytracker.ui.theme.Maroon
-
-//This page will display all the specification of our device
-@Composable
-fun SpecificationScreen (navController: NavController,
-                         vm: PredictionViewModel = viewModel()){
-    // ----- Bottom Navigation Items -----
-    data class BottomItem(
-        val label: String,
-        val route: String,
-        val icon: @Composable () -> Unit
-    )
-    // Replace routes below with your actual routes where needed.
-    val items = listOf(
-        BottomItem("Home", Routes.HomeScreen, { Icon(Icons.Filled.Home, contentDescription = "Home") }),
-        BottomItem("Charts", Routes.DataScreen, { Icon(Icons.Filled.List, contentDescription = "Charts") }),
-        BottomItem("Specifications", Routes.SpecScreen , { Icon(Icons.Filled.Info, contentDescription = "Alerts") }),
-
-        )
-
-    val navBackStackEntry by navController.currentBackStackEntryAsState()
-    val currentRoute = navBackStackEntry?.destination?.route
-
-    Scaffold(
-        containerColor = Maroon,
-        bottomBar = {
-            NavigationBar(
-                containerColor = Maroon,
-                contentColor = Color.White,
-            ) {
-                items.forEach { item ->
-                    NavigationBarItem(
-                        selected = currentRoute == item.route,
-                        onClick = {
-                            if (currentRoute != item.route) {
-                                navController.navigate(item.route) {
-                                    launchSingleTop = true
-                                    restoreState = true
-                                    popUpTo(navController.graph.startDestinationId) { saveState = true }
-                                }
-                            }
-                        },
-                        icon = { item.icon() },
-                        label = { Text(item.label) },
-                        alwaysShowLabel = true,
-                        colors = NavigationBarItemDefaults.colors(
-                            selectedIconColor = Color.White,
-                            unselectedIconColor = Color.White,
-                            unselectedTextColor = Color.White,
-                            indicatorColor = Black
-
-                        )
-                    )
-                }
-            }
-        }
-    ) {innerPadding ->
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(innerPadding)
-                .background(Color.Black)
-
-        ) {
-            Column(
-                Modifier
-                    .align(Alignment.Center)
-                    .padding(vertical = 30.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(20.dp)
-            ) {
-                Text(
-                    text = "Power Supply: ",
-                    color = Color.White
-                )
-                Text(
-                    text = "Temperature Sensor: ",
-                    color = Color.White
-                )
-                Text(
-                    text = "Humidity Sensor: ",
-                    color = Color.White
-                )
-                Text(
-                    text = "Particle Sensor: ",
-                    color = Color.White
-                )
-                Text(text = "System Specs")
-
-            }
-        }
-    }
-}*/
