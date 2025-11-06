@@ -22,11 +22,15 @@ import java.time.OffsetDateTime
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Locale
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.delay
+
 
 
 class LatestChartViewModel : ViewModel() {
-    // Chart points per series
 
+    // Chart points per series
     val tempPoints = mutableStateListOf<Point>()
     val humidityPoints = mutableStateListOf<Point>()
     val tvocPoints = mutableStateListOf<Point>()
@@ -44,6 +48,20 @@ class LatestChartViewModel : ViewModel() {
 
     private val gson = Gson()
 
+    // --- Jobs so we can control which loop runs ---
+    private var chartJob: Job? = null
+    private var latestOnlyJob: Job? = null
+
+    // Stop helpers (optional but nice to have)
+    fun stopAutoFetchCharts() {
+        chartJob?.cancel()
+        chartJob = null
+    }
+    fun stopAutoFetchLatestOnly() {
+        latestOnlyJob?.cancel()
+        latestOnlyJob = null
+    }
+
 
     fun fetch() {
         viewModelScope.launch {
@@ -56,6 +74,7 @@ class LatestChartViewModel : ViewModel() {
                 buildLast47Hours(xLabels)
                 Log.d("LatestVMLabels", xLabels.toString())
                 buildLatestPoints(resp)
+                updateLatestFromResponse(resp)
             } catch (e: Exception) {
                 Log.e("LatestVM", "fetch error", e)
             } finally {
@@ -119,14 +138,118 @@ class LatestChartViewModel : ViewModel() {
         Log.d("LatestVM", "Finished building points. Total=${tempPoints.size}")
     }
     init {
-        startAutoFetch()
+        // EITHER:
+        // startAutoFetchCharts()      // charts + labels + snapshot
+
+        // OR (what you asked for):
+        startAutoFetchLatestOnly()      // snapshot only, no chart updates
     }
 
-    private fun startAutoFetch() {
+    private fun startAutoFetchCharts(intervalMs: Long = 6_000L) {
+        chartJob?.cancel()
+        chartJob = viewModelScope.launch {
+            while (isActive) {
+                fetch()                 // <-- does charts + labels + snapshot
+                delay(intervalMs)
+            }
+        }
+    }
+    private fun startAutoFetchLatestOnly(intervalMs: Long = 6_000L) {
+        latestOnlyJob?.cancel()
+        latestOnlyJob = viewModelScope.launch {
+            while (isActive) {
+                fetchLatestOnly()       // <-- ONLY updates `latestSnapshot` (no charts)
+                delay(intervalMs)
+            }
+        }
+    }
+
+
+    private fun startAutoFetchLatest() {
         viewModelScope.launch {
             while (true) {
-                fetch()
+                fetchLatestOnly()
                 kotlinx.coroutines.delay(6_000L) // 15 seconds
+            }
+        }
+    }
+    // 1) A simple container for the latest values (already in the ViewModel file)
+    data class LatestSnapshot(
+        val temperatureF: Float,
+        val humidity: Float,
+        val tvoc: Float,
+        val co: Float,
+        val flammable: Float,
+        val batteryPct: Int,
+        val eventLocalTime: String,     // formatted & safe (e.g., "05:12 PM" or "--:--")
+    )
+
+
+    // 2) Hold the latest snapshot as observable state
+    var latestSnapshot by mutableStateOf<LatestSnapshot?>(null)
+        private set
+
+    // 3) Create/update snapshot from a single reading
+    private fun buildSnapshotFrom(
+        tempC: Float?,
+        humidity: Float?,
+        tvoc: Float?,
+        co: Float?,
+        flammable: Float?,
+        batteryPct: Int?,
+        eventProcessedUtcTime: String?
+    ): LatestSnapshot {
+        val tempF = ((tempC ?: Float.NaN) * 9f / 5f) + 32f
+        val nowFormatted = java.time.LocalDateTime.now()
+            .format(java.time.format.DateTimeFormatter.ofPattern("hh:mm:ss a", java.util.Locale.US))
+
+        return LatestSnapshot(
+            temperatureF = tempF,
+            humidity = humidity ?: Float.NaN,
+            tvoc = tvoc ?: Float.NaN,
+            co = co ?: Float.NaN,
+            flammable = flammable ?: Float.NaN,
+            batteryPct = batteryPct ?: -1,
+            eventLocalTime = nowFormatted   // ⬅ use current time
+
+        )
+    }
+
+
+    // 4) Extract only the most recent reading from the HTTP response and update state
+    private fun updateLatestFromResponse(resp: ChartResponse) {
+        val r = resp.historical_last_48.lastOrNull() ?: run {
+            Log.w("LatestVM", "No readings available in response.")
+            latestSnapshot = null
+            latestBattery = null
+            return
+        }
+
+        // Update the single snapshot
+        latestSnapshot = buildSnapshotFrom(
+            tempC = r.Temperature,
+            humidity = r.Humidity,
+            tvoc = r.TVOC,
+            co = r.CO,
+            flammable = r.FlammableGases,
+            batteryPct = r.BatteryLife.toInt(),
+            eventProcessedUtcTime = r.EventProcessedUtcTime
+        )
+
+        // Keep your existing single-value for battery as well (if you still want it)
+        latestBattery = latestSnapshot?.batteryPct
+    }
+
+    // 5) Optional: a lightweight fetch that ONLY updates latest values (no chart work)
+    fun fetchLatestOnly() {
+        viewModelScope.launch {
+            try {
+                val el: JsonElement = Http.api.getCurrentChartData()
+                val obj: JsonObject = if (el.isJsonArray) el.asJsonArray[1].asJsonObject else el.asJsonObject
+                val resp: ChartResponse = gson.fromJson(obj, ChartResponse::class.java)
+                updateLatestFromResponse(resp)
+            } catch (e: Exception) {
+                Log.e("LatestVM", "fetchLatestOnly error", e)
             }
         }
     }
@@ -154,3 +277,4 @@ fun buildLast47Hours(xLabels: MutableList<String>) {
         xLabels.add(labelTime.format(formatter))
     }
 }
+

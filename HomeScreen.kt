@@ -67,6 +67,16 @@ import java.util.Locale
 fun HomeScreen(navController: NavController, vm: LatestChartViewModel = viewModel()) {
     val systemUiController = rememberSystemUiController()
 
+    val latest = vm.latestSnapshot
+    // Show placeholders if null
+    val tempText = latest?.let { "%.1f".format(it.temperatureF) } ?: "Loading"
+    val humText  = latest?.let { "%.2f".format(it.humidity) } ?: "Loading"
+    val flammText= latest?.let { "%.2f".format(it.flammable) } ?: "Loading"
+    val tvocText = latest?.let { "%.2f".format(it.tvoc) } ?: "Loading"
+    val coText   = latest?.let { "%.2f".format(it.co) } ?: "Loading"
+    val battText = latest?.batteryPct?.toString() ?: "Loading"
+    val timeText = latest?.eventLocalTime ?: "Loading"
+
     LaunchedEffect(Unit) {
         delay(1000L)
         vm.fetch()
@@ -151,7 +161,7 @@ fun HomeScreen(navController: NavController, vm: LatestChartViewModel = viewMode
     val items = listOf(
         BottomItem("Home", Routes.HomeScreen, { Icon(Icons.Filled.Home, contentDescription = "Home") }),
 
-        BottomItem("Charts", Routes.DataScreen, {
+        BottomItem("Charts", Routes.ChartsScreen, {
             Icon(
             painter = painterResource(R.drawable.baricon),
             contentDescription = "Charts",
@@ -248,7 +258,7 @@ fun HomeScreen(navController: NavController, vm: LatestChartViewModel = viewMode
             ) {
                 TelemetryRow(
                     label = "Temperature:",
-                    value = vm.tempPoints.lastOrNull()?.y.toString(),
+                    value = tempText,
                     unit  = "°F",
                 )
 
@@ -256,7 +266,7 @@ fun HomeScreen(navController: NavController, vm: LatestChartViewModel = viewMode
 
                 TelemetryRow(
                     label = "Humidity:",
-                    value = vm.humidityPoints.lastOrNull()?.y.toString(),
+                    value = humText,
                     unit  = "%",
                 )
 
@@ -264,23 +274,23 @@ fun HomeScreen(navController: NavController, vm: LatestChartViewModel = viewMode
 
                 TelemetryRow(
                     label = "Flammable Gases:",
-                    value = vm.flammablePoints.lastOrNull()?.y.toString(),
-                    unit  = "%",
-                )
-
-                Spacer(Modifier.height(16.dp))
-
-                TelemetryRow(
-                    label = "TVOC:",
-                    value = vm.tvocPoints.lastOrNull()?.y.toString(),
+                    value = flammText,
                     unit  = "ppm",
                 )
 
                 Spacer(Modifier.height(16.dp))
 
                 TelemetryRow(
+                    label = "TVOC:",
+                    value = tvocText,
+                    unit  = "ppb",
+                )
+
+                Spacer(Modifier.height(16.dp))
+
+                TelemetryRow(
                     label = "CO:",
-                    value = vm.coPoints.lastOrNull()?.y.toString(),
+                    value = coText,
                     unit  = "ppm",
                 )
 
@@ -288,7 +298,7 @@ fun HomeScreen(navController: NavController, vm: LatestChartViewModel = viewMode
 
                 TelemetryRow(
                     label = "Battery Life: ",
-                    value = vm.latestBattery.toString(),
+                    value = battText,
                     unit  = "%",
                 )
 
@@ -296,13 +306,13 @@ fun HomeScreen(navController: NavController, vm: LatestChartViewModel = viewMode
 
                 TelemetryRow(
                     label = "Time Last Checked:",
-                    value = latestTime.first, // "05:40:01"
-                    unit  = latestTime.second, // "PM" or "AM"
+                    value = timeText, // "05:40:01"
+                    unit  = null
                 )
 
                 Button(
                     onClick = {
-                        vm.fetch()
+                        vm.fetchLatestOnly()
 
                     },
                     colors = ButtonDefaults.buttonColors(
@@ -342,7 +352,7 @@ private fun TelemetryRow(
         modifier = Modifier
             .fillMaxWidth()
             .clip(shape) // rounds the border corners
-            .border(1.dp, Color.White.copy(alpha = 0.25f), shape) // 👈 outline
+            .border(1.dp, Color.White.copy(alpha = 0.25f), shape) //
             .background(Maroon) // or a subtle fill if you want
             .padding(horizontal = 16.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically
@@ -380,7 +390,7 @@ private fun TelemetryRow(
 }
 @Composable
 fun LoadingHomeOverlay(
-    message: String = "Preparing charts…",
+    message: String = "Preparing Values…",
     modifier: Modifier = Modifier
 ) {
     Box(

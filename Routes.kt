@@ -10,4 +10,5 @@ object Routes {
     var DataCreationScreen = "Date_Creation_Screen"
     var MainScreen = "Main_Screen"
     var PredictionScreen = "Prediction_Screen"
+    var ChartsScreen = "Charts_Screen"
 }

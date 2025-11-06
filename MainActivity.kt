@@ -47,6 +47,9 @@ class MainActivity : ComponentActivity() {
                 composable(Routes.PredictionScreen) {
                     PredictionScreen(navController)
                 }
+                composable(Routes.ChartsScreen) {
+                    ChartsScreen(navController)
+                }
 
                 /*composable(Routes.DataCreationScreen){
                     DataCreationScreen(navController)

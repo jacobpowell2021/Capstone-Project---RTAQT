@@ -143,7 +143,7 @@ fun DataScreen(
                     .background(Color.Black)
                     .padding(innerPadding)
             ) {
-                Text("Last 24 Hours")
+                Text("Last 12 Hours")
                 LatestChartsSection()
             }
         }

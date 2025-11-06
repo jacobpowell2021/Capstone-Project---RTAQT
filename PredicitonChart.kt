@@ -38,8 +38,6 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import co.yml.charts.common.model.Point
 import com.example.airqualitytracker.ui.theme.Maroon
 
-
-// PredictionChart.kt
 enum class PredMetric(
     val label: String,
     val color: Color,
@@ -51,10 +49,11 @@ enum class PredMetric(
     TVOC       ("TVOC",             Color.Green,  0f..1f),
     CO         ("CO",               Color.Yellow, 0f..1f)
 }
+
 @Composable
 fun LoadingPredictionOverlay(
     message: String = "Loading…",
-    spinnerColor: Color = Color.Cyan
+    spinnerColor: Color = Maroon
 ) {
     Box(
         modifier = Modifier
@@ -69,10 +68,11 @@ fun LoadingPredictionOverlay(
         }
     }
 }
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PredictionChartsSection(vm: PredictionChartViewModel = viewModel()) {
-    var daysText by remember { mutableStateOf("3.0") }
+    var daysText by remember { mutableStateOf("1.0") }
     var expanded by remember { mutableStateOf(false) }
     var selected by remember { mutableStateOf(PredMetric.Temperature) }
 
@@ -80,17 +80,17 @@ fun PredictionChartsSection(vm: PredictionChartViewModel = viewModel()) {
     fun pointsFor(metric: PredMetric): List<Point> = when (metric) {
         PredMetric.Temperature -> vm.tempPoints
         PredMetric.Humidity    -> vm.humidityPoints
-        PredMetric.Flammable    -> vm.flammablePoints
+        PredMetric.Flammable   -> vm.flammablePoints
         PredMetric.TVOC        -> vm.tvocPoints
         PredMetric.CO          -> vm.coPoints
     }
 
-    Box(Modifier.fillMaxSize()) {
+    Box(Modifier.fillMaxWidth()) {
         Column(
             modifier = Modifier
-                .verticalScroll(rememberScrollState())
                 .padding(16.dp)
-                .fillMaxWidth()
+                .fillMaxWidth(),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             // Row: days input + fetch
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -114,90 +114,106 @@ fun PredictionChartsSection(vm: PredictionChartViewModel = viewModel()) {
                 )
 
                 Button(
-                    onClick = { daysText.toFloatOrNull()?.let(vm::fetchAndBuild) }
-                ) { Text(if (vm.isLoading.value) "Loading…" else "Fetch") }
-            }
-
-            Spacer(Modifier.height(12.dp))
-            /*
-            // Debug info (optional)
-            Text("points: ${vm.tempPoints.size}", color = Color.White)
-            if (vm.tempPoints.isNotEmpty()) {
-                val first = vm.tempPoints.first()
-                val last  = vm.tempPoints.last()
-                Text("first: x=${first.x}, y=${first.y}", color = Color.White)
-                Text("last:  x=${last.x},  y=${last.y}",  color = Color.White)
-            }
-            vm.error.value?.let { Text("Error: $it", color = Color(0xFFFFB4A9)) }
-
-            Spacer(Modifier.height(12.dp))
-            */
-            // Dropdown to choose which chart to display
-            ExposedDropdownMenuBox(
-                expanded = expanded,
-                onExpandedChange = { expanded = !expanded },
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                TextField(
-                    readOnly = true,
-                    value = selected.label,
-                    onValueChange = {},
-                    modifier = Modifier
-                        .menuAnchor()
-                        .fillMaxWidth(),
-                    label = { Text("Select metric", color = Color.White) },
-                    trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded) },
-                    colors = TextFieldDefaults.textFieldColors(
-                        focusedTextColor = Color.White,
-                        unfocusedTextColor = Color.White,
-                        containerColor = Maroon,                  // Background
-                        focusedIndicatorColor = Color.White,           // Underline when focused
-                        unfocusedIndicatorColor = Color.White,         // Underline when not focused
-                        focusedLabelColor = Color.White,               // Label color when active
-                        unfocusedLabelColor = Color.White,          //label color when inactive
-                        cursorColor = Color.White,
-                    )
-                )
-
-                ExposedDropdownMenu(
-                    expanded = expanded,
-                    onDismissRequest = { expanded = false },
-                    modifier = Modifier.background(Color(0xFF121212))
+                    onClick = { daysText.toFloatOrNull()?.let(vm::fetchAndBuild) },
+                    enabled = !vm.isLoading.value
                 ) {
-                    PredMetric.entries.forEach { option ->
-                        DropdownMenuItem(
-                            text = {
-                                Text(
-                                    option.label,
-                                    color = if (option == selected) Color.Cyan else Color.White
-                                )
-                            },
-                            onClick = {
-                                selected = option
-                                expanded = false
-                            },
-                            colors = MenuDefaults.itemColors(
-                                textColor = Color.White,
-                                disabledTextColor = Color.Gray
-                            )
-                        )
-                    }
+                    Text(if (vm.isLoading.value) "Loading…" else "Fetch")
                 }
             }
 
-            Spacer(Modifier.height(16.dp))
+            // Error message
+            vm.error.value?.let { errorMsg ->
+                Text(
+                    "Error: $errorMsg",
+                    color = Color(0xFFFFB4A9),
+                    modifier = Modifier.padding(vertical = 8.dp)
+                )
+            }
 
-            // Crossfade between charts for smoother UX
-            Crossfade(targetState = selected, label = "predMetricCrossfade") { metric ->
-                MetricLineChart(
-                    title = metric.label,
-                    points = pointsFor(metric),
-                    color = metric.color,
-                    fixedYRange = metric.yRange,
-                    xLabels = vm.xLabels,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(240.dp)
+            // Only show chart controls if we have data
+            if (vm.tempPoints.isNotEmpty() || vm.humidityPoints.isNotEmpty()) {
+                // Dropdown to choose which chart to display
+                ExposedDropdownMenuBox(
+                    expanded = expanded,
+                    onExpandedChange = { expanded = !expanded },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    TextField(
+                        readOnly = true,
+                        value = selected.label,
+                        onValueChange = {},
+                        modifier = Modifier
+                            .menuAnchor()
+                            .fillMaxWidth(),
+                        label = { Text("Select metric", color = Color.White) },
+                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded) },
+                        colors = TextFieldDefaults.colors(
+                            focusedTextColor = Color.White,
+                            unfocusedTextColor = Color.White,
+                            focusedContainerColor = Maroon,
+                            unfocusedContainerColor = Maroon,
+                            focusedIndicatorColor = Color.White,
+                            unfocusedIndicatorColor = Color.White,
+                            focusedLabelColor = Color.White,
+                            unfocusedLabelColor = Color.White,
+                            cursorColor = Color.White,
+                        )
+                    )
+
+                    ExposedDropdownMenu(
+                        expanded = expanded,
+                        onDismissRequest = { expanded = false },
+                        modifier = Modifier.background(Color(0xFF121212))
+                    ) {
+                        PredMetric.entries.forEach { option ->
+                            DropdownMenuItem(
+                                text = {
+                                    Text(
+                                        option.label,
+                                        color = if (option == selected) Color.Cyan else Color.White
+                                    )
+                                },
+                                onClick = {
+                                    selected = option
+                                    expanded = false
+                                },
+                                colors = MenuDefaults.itemColors(
+                                    textColor = Color.White,
+                                    disabledTextColor = Color.Gray
+                                )
+                            )
+                        }
+                    }
+                }
+
+                // Crossfade between charts for smoother UX
+                Crossfade(targetState = selected, label = "predMetricCrossfade") { metric ->
+                    val points = pointsFor(metric)
+                    if (points.isNotEmpty()) {
+                        MetricLineChart(
+                            title = metric.label,
+                            points = points,
+                            color = metric.color,
+                            fixedYRange = metric.yRange,
+                            xLabels = vm.xLabels,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(240.dp)
+                        )
+                    } else {
+                        Text(
+                            "No data available for ${metric.label}",
+                            color = Color.Gray,
+                            modifier = Modifier.padding(32.dp)
+                        )
+                    }
+                }
+            } else if (!vm.isLoading.value) {
+                // No data and not loading - show instruction
+                Text(
+                    "Enter number of days and click Fetch to load predictions",
+                    color = Color.Gray,
+                    modifier = Modifier.padding(vertical = 24.dp)
                 )
             }
         }
