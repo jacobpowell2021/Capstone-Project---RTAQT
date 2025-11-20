@@ -95,7 +95,7 @@ class LatestChartViewModel : ViewModel() {
         Log.d("LatestVM", "Building latest points...")
 
         resp.historical_last_48.forEachIndexed { i, reading ->
-            val x = i.toFloat() / 2f
+            val x = i.toFloat()/2f
 
             var y = (reading.Temperature * 9/5) + 32
             // Add point

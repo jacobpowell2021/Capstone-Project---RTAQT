@@ -9,7 +9,7 @@ data class DaysRequest(val days: Float)
 data class PredictionResponse(
     val daysRequested: Float =0f,
     val forecastSteps: Int = 0,
-    val intervalMinutes: Int = 0,
+    val step_minutes: Int?,
     val forecasts: Forecasts = Forecasts()
 )
 

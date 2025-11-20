@@ -57,20 +57,23 @@ fun SpecificationScreen(
     )
     val items = listOf(
         BottomItem("Home", Routes.HomeScreen, { Icon(Icons.Filled.Home, contentDescription = "Home") }),
-
-        BottomItem("Charts", Routes.DataScreen, {
+        BottomItem("Charts", Routes.ChartsScreen, {
             Icon(
                 painter = painterResource(R.drawable.baricon),
                 contentDescription = "Charts",
                 modifier = Modifier.size(24.dp),
-                tint = Color.Unspecified)}),
-
-        BottomItem("Prediction", Routes.PredictionScreen , {Icon(
-            painter = painterResource(R.drawable.predictionicon),
-            contentDescription = "Prediction",
-            modifier = Modifier.size(24.dp),
-            tint = Color.Unspecified)}),
-        BottomItem("Specs", Routes.SpecScreen , { Icon(Icons.Filled.Info, contentDescription = "Alerts") }),
+                tint = Color.Unspecified
+            )
+        }),
+        /*BottomItem("Prediction", Routes.PredictionScreen, {
+            Icon(
+                painter = painterResource(R.drawable.predictionicon),
+                contentDescription = "Prediction",
+                modifier = Modifier.size(24.dp),
+                tint = Color.Unspecified
+            )
+        }),*/
+        BottomItem("Specs", Routes.SpecScreen, { Icon(Icons.Filled.Info, contentDescription = "Alerts") }),
     )
 
     val navBackStackEntry by navController.currentBackStackEntryAsState()
@@ -138,10 +141,13 @@ fun SpecificationScreen(
             ) {
                 // ----- Device Specs -----
                 Text("System Specs", color = Color.White, style = MaterialTheme.typography.titleMedium)
-                Text("Power Supply: ", color = Color.White)
-                Text("Temperature Sensor: ", color = Color.White)
-                Text("Humidity Sensor: ", color = Color.White)
-                Text("Particle Sensor: ", color = Color.White)
+                Text("The RTAQT is a Real-Time Air Quality Tracker designed by Xavier Carbone-Larson, Isaiah Pili, Jacob Powell, and Angel Soto", color = Color.White)
+                Text("Power Supply: This system is Battery Powered", color = Color.White)
+                Text("Temperature Sensor: The system is designed to send an alert if temperature reaches above 80 degrees Fahrenheit", color = Color.White)
+                Text("Humidity Sensor: Track the humidity level of the room. ", color = Color.White)
+                Text("Flammable Gasses Sensor: It is measured from part per million", color = Color.White)
+                Text("TVOC: It is measured from parts per billion", color = Color.White)
+                Text("CO: It is measured from parts per million", color = Color.White)
 
                 HorizontalDivider(color = Color.White.copy(alpha = 0.2f))
 

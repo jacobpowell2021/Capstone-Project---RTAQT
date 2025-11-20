@@ -98,5 +98,5 @@ enum class Metric(
     Humidity   ("Humidity (%)",     Color.Blue,  0f..100f),
     Flammable  ("Flammable Gas",    Color.Blue,  0f..1f),
     TVOC       ("TVOC",             Color.Green, 0f..110f),
-    CO         ("CO",               Color.Yellow,0f..5f)
+    CO         ("CO",               Color.Yellow,0f..100f)
 }

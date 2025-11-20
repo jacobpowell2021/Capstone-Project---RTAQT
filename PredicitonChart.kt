@@ -47,7 +47,7 @@ enum class PredMetric(
     Humidity   ("Humidity (%)",     Color.Blue,   0f..100f),
     Flammable  ("Flammable Gas",    Color.Blue,   0f..1f),
     TVOC       ("TVOC",             Color.Green,  0f..1f),
-    CO         ("CO",               Color.Yellow, 0f..1f)
+    CO         ("CO",               Color.Yellow, 0f..2f)
 }
 
 @Composable
