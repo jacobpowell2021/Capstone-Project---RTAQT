@@ -1,0 +1,585 @@
+"""Predict future sensor readings and return them as JSON via HTTP trigger.
+
+This file was modernized to improve readability and error handling. It reads
+database connection parameters from environment variables with sensible
+fallbacks. The main logic is wrapped in a `http_main()` function and the DB
+connection is cleaned up in a finally block.
+"""
+
+import os
+import logging
+import sys
+from typing import List, Tuple, Optional, Any, cast
+
+import pyodbc
+import numpy as np
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from statsmodels.tsa.arima.model import ARIMA
+import math
+import queue
+import threading
+import time
+
+
+# Azure Functions HTTP types are optional; avoid hard dependency so file can be run locally
+try:
+    import azure.functions as func
+except Exception:
+    func = None
+
+# Configure logging to output to stdout for visibility in various environments (e.g., Azure Functions)
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+logger = logging.getLogger(__name__)
+
+
+# Database connection parameters from environment variables with fallbacks to defaults
+def get_db_config() -> Tuple[str, str, str, str, str]:
+    """Return database connection parameters.
+
+    Values are read from environment variables with the original values as
+    fallbacks to preserve prior behaviour.
+    """
+    server = os.getenv("DB_SERVER", "capstone-database.database.windows.net") # e.g. "myserver.database.windows.net"
+    database = os.getenv("DB_NAME", "capstoneSampleDatabase")                 # e.g. "myDataBase"
+    username = os.getenv("DB_USER", "sqlServerAdmin")                         # e.g. "mylogin"
+    password = os.getenv("DB_PASS", "1wLbroSwEgIxUtr")                        # e.g. "mypassword"
+    driver = os.getenv("DB_DRIVER", "ODBC Driver 18 for SQL Server")          # e.g. "ODBC Driver 18 for SQL Server"
+    return server, database, username, password, driver
+
+
+# Connection pool helpers -------------------------------------------------
+try:
+    # enable driver-level pooling; safe to set even if driver ignores it
+    pyodbc.pooling = True
+except Exception:
+    pass
+
+_global_pool: Optional[queue.Queue] = None
+_pool_init_lock = threading.Lock()
+
+def _make_conn_str() -> str:
+    server, database, username, password, driver = get_db_config()
+    return (
+        f"DRIVER={driver};SERVER=tcp:{server},1433;DATABASE={database};"
+        f"UID={username};PWD={password};Encrypt=yes;TrustServerCertificate=no;Connection Timeout=15;"
+    )
+
+def _create_connection():
+    conn_str = _make_conn_str()
+    return pyodbc.connect(conn_str, timeout=15)
+
+def _init_pool():
+    global _global_pool
+    if _global_pool is not None:
+        return
+    with _pool_init_lock:
+        if _global_pool is not None:
+            return
+        size = int(os.getenv("DB_POOL_SIZE", "2"))
+        q = queue.Queue(maxsize=size)
+        # Prefill pool with up to `size` connections (best-effort)
+        for _ in range(size):
+            try:
+                q.put(_create_connection())
+            except Exception:
+                break
+        _global_pool = q
+
+def _get_conn_from_pool(timeout: float = 2.0):
+    """Checkout a connection from the pool. Creates new connection on failure."""
+    _init_pool()
+    q = _global_pool
+    if q is None:
+        return _create_connection()
+    try:
+        conn = q.get(block=True, timeout=timeout)
+        # quick health check
+        try:
+            cur = conn.cursor()
+            cur.execute("SELECT 1")
+            cur.fetchone()
+            cur.close()
+            return conn
+        except Exception:
+            try:
+                conn.close()
+            except Exception:
+                pass
+            return _create_connection()
+    except Exception:
+        # pool empty or timed out; create a temporary connection
+        return _create_connection()
+
+def _return_conn_to_pool(conn) -> None:
+    """Return connection to pool or close it if the pool is full or not initialized."""
+    if conn is None:
+        return
+    try:
+        _init_pool()
+        q = _global_pool
+        if q is None:
+            try:
+                conn.close()
+            except Exception:
+                pass
+            return
+        try:
+            q.put(conn, block=False)
+        except Exception:
+            try:
+                conn.close()
+            except Exception:
+                pass
+    except Exception:
+        try:
+            conn.close()
+        except Exception:
+            pass
+
+# End connection pool helpers ---------------------------------------------
+
+# Thread-local connection reuse (Option A) ---------------------------------
+_thread_local = threading.local()
+
+def _get_thread_conn():
+    """Return a per-thread pyodbc connection. Creates one if missing or broken."""
+    conn = getattr(_thread_local, "conn", None)
+    if conn is not None:
+        try:
+            cur = conn.cursor()
+            cur.execute("SELECT 1")
+            cur.fetchone()
+            cur.close()
+            return conn
+        except Exception:
+            try:
+                conn.close()
+            except Exception:
+                pass
+            _thread_local.conn = None
+
+    # create a new connection and store it on the thread-local storage
+    conn = _create_connection()
+    _thread_local.conn = conn
+    return conn
+
+def _close_thread_conn():
+    conn = getattr(_thread_local, "conn", None)
+    if conn is not None:
+        try:
+            conn.close()
+        except Exception:
+            pass
+        _thread_local.conn = None
+
+# End thread-local helpers -------------------------------------------------
+
+# Warm the main thread DB connection at import so first real request is faster.
+try:
+    try:
+        _get_thread_conn()
+        logger.info("Warmed main thread DB connection at import")
+    except Exception:
+        logger.debug("Initial DB warm-up failed at import", exc_info=True)
+except Exception:
+    # be defensive in case logging isn't fully configured yet
+    pass
+
+# Fetches sensor data from the SQL database from the specified table, i.e. iotdatatablefromsensor
+def fetch_sensor_data(cursor) -> List[Tuple[float, float, float, float, float]]:
+    """Fetch sensor rows from `iotdatatablefromsensor`.
+
+    Returns a list of 5-tuples: (Temperature, Humidity, FlammableGases, TVOC, CO)
+    """
+    # Use confirmed `enqueuedTime` column for chronological ordering.
+    cursor.execute(
+        "SELECT Temperature, Humidity, FlammableGases, TVOC, CO "
+        "FROM iotdatatablefromsensor "
+        "ORDER BY enqueuedTime ASC;"
+    )
+    rows = cursor.fetchall()
+
+    # Defensive: only keep the first five sensor columns if extra columns present
+    trimmed = [(r[0], r[1], r[2], r[3], r[4]) for r in rows]
+    return trimmed
+
+# Converts fetched rows into numpy arrays for modeling
+def series_from_rows(rows) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    """Convert fetched rows into numpy arrays for modeling."""
+    if not rows:
+        return (np.array([]), np.array([]), np.array([]), np.array([]), np.array([]))
+
+    temps, hums, flams, tvocs, cos = zip(*rows)
+    return (np.array(temps, dtype=float), np.array(hums, dtype=float), np.array(flams, dtype=float),
+            np.array(tvocs, dtype=float), np.array(cos, dtype=float))
+
+# Fits an ARIMA(1,1,1) model and forecasts future values
+def fit_forecast(series: np.ndarray, steps: int) -> np.ndarray:
+    """Fit a robust forecast for `series` and return `steps` ahead.
+
+    Strategy mirrors the batch script: try SARIMAX with relaxed
+    constraints and limited iterations, fall back to ARIMA on failure,
+    and clip negative forecasts to zero.
+    """
+    fit_start = time.time()
+    
+    if series.size < 3:
+        raise ValueError("series too short for modeling")
+
+    series = np.asarray(series, dtype=float)
+    series = series[np.isfinite(series)]
+
+    forecast = None
+    # Only attempt SARIMAX if we have at least three seasonal cycles of history
+    seasonal_period = 96
+    min_history_for_seasonal = seasonal_period * 3
+    try:
+        if series.size >= min_history_for_seasonal:
+            from statsmodels.tsa.statespace.sarimax import SARIMAX
+            import warnings
+            from statsmodels.tools.sm_exceptions import ConvergenceWarning
+
+            model = SARIMAX(series, order=(1, 1, 1), seasonal_order=(1, 1, 1, seasonal_period),
+                            enforce_stationarity=False, enforce_invertibility=False)
+
+            sarimax_start = time.time()
+            
+            # Wrap fit() in a timeout to prevent infinite loops
+            # Use threading-based timeout: if fit takes > 10 seconds, give up
+            sarimax_timeout = 10.0
+            fitted = None
+            exception_during_fit = None
+            
+            def do_sarimax_fit():
+                nonlocal fitted, exception_during_fit
+                try:
+                    with warnings.catch_warnings(record=True) as w:
+                        warnings.simplefilter("always")
+                        # Note: statsmodels.SARIMAX.fit() does not accept maxiter in newer versions
+                        # Use default optimization settings (typically uses L-BFGS-B with reasonable iterations)
+                        fitted = model.fit()
+                        for warn in w:
+                            if issubclass(getattr(warn, "category", type(None)), ConvergenceWarning):
+                                raise RuntimeError(f"SARIMAX convergence warning: {warn.message}")
+                except Exception as e:
+                    exception_during_fit = e
+            
+            fit_thread = threading.Thread(target=do_sarimax_fit, daemon=True)
+            fit_thread.start()
+            fit_thread.join(timeout=sarimax_timeout)
+            
+            if fit_thread.is_alive():
+                logger.warning("SARIMAX fit exceeded %.1fs timeout (history_size=%d); falling back to ARIMA", 
+                              sarimax_timeout, series.size)
+                raise RuntimeError(f"SARIMAX fit timeout after {sarimax_timeout}s")
+            
+            if exception_during_fit is not None:
+                raise exception_during_fit
+            
+            if fitted is None:
+                raise RuntimeError("SARIMAX fit produced no result")
+            
+            sarimax_elapsed = time.time() - sarimax_start
+            forecast = cast(Any, fitted).forecast(steps=steps)
+            logger.info("SARIMAX fit completed in %.2fs (history_size=%d)", sarimax_elapsed, series.size)
+        else:
+            # Not enough history: use ARIMA directly for speed
+            from statsmodels.tsa.arima.model import ARIMA
+            arima_start = time.time()
+            model = ARIMA(series, order=(1, 1, 1))
+            fitted = model.fit()
+            arima_elapsed = time.time() - arima_start
+            forecast = cast(Any, fitted).forecast(steps=steps)
+            logger.info("ARIMA fit completed in %.2fs (history_size=%d, insufficient for SARIMAX)", arima_elapsed, series.size)
+
+    except Exception as ex:
+        logger.debug("Modeling failed: %s", ex, exc_info=True)
+        try:
+            # Try a lightweight ARIMA as a fallback
+            from statsmodels.tsa.arima.model import ARIMA
+            arima_fallback_start = time.time()
+            model = ARIMA(series, order=(1, 1, 1))
+            fitted = model.fit()
+            arima_fallback_elapsed = time.time() - arima_fallback_start
+            forecast = cast(Any, fitted).forecast(steps=steps)
+            logger.info("ARIMA fallback fit completed in %.2fs (history_size=%d)", arima_fallback_elapsed, series.size)
+        except Exception as ar_ex:
+            logger.exception("All model attempts failed: %s", ar_ex)
+            return np.full((steps,), np.nan)
+    
+    total_fit_time = time.time() - fit_start
+    logger.info("Total fit_forecast() time: %.2fs", total_fit_time)
+
+    arr = np.asarray(forecast, dtype=float)
+    arr = np.where(np.isfinite(arr), arr, 0.0)
+    arr[arr < 0.0] = 0.0
+    return arr
+
+# Main execution logic: Connects to DB, fetches data, models, and returns forecasts
+def _connect_and_fetch() -> Tuple[List[Tuple[float, float, float, float, float]], Optional[Exception]]:
+    """Connect to DB and fetch sensor rows. Returns (rows, error).
+
+    Returns rows (possibly empty) and any exception encountered.
+    """
+    # Use pooled connections to avoid reconnect overhead on warm instances.
+    cursor = None
+    conn = None
+    try:
+        conn = _get_thread_conn()
+        logger.info("Using thread-local DB connection to fetch sensor rows")
+        cursor = conn.cursor()
+        rows = fetch_sensor_data(cursor)
+        return rows, None
+
+    except Exception as ex:
+        logger.exception("Error fetching sensor data: %s", ex)
+        return [], ex
+
+    finally:
+        if cursor is not None:
+            try:
+                cursor.close()
+            except Exception:
+                logger.debug("Error closing cursor", exc_info=True)
+        # Keep thread-local connection open for reuse; do not close here.
+        pass
+
+
+def _get_cached_forecasts(steps: int) -> Optional[dict]:
+    """Attempt to read cached forecasts from `iotdatatablepredictive`.
+
+    Returns a dict of series->list if at least `steps` rows are available,
+    otherwise returns None to indicate a live-run is required.
+    """
+    server, database, username, password, driver = get_db_config()
+    conn_str = (
+        f"DRIVER={driver};SERVER=tcp:{server},1433;DATABASE={database};UID={username};PWD={password};"
+        f"Encrypt=yes;TrustServerCertificate=no"
+    )
+    conn = None
+    cursor = None
+    try:
+        conn = _get_thread_conn()
+        cursor = conn.cursor()
+        # Select only the sensor columns we insert into the predictive table
+        cursor.execute(
+            "SELECT Temperature, Humidity, FlammableGases, TVOC, CO FROM iotdatatablepredictive;"
+        )
+        rows = cursor.fetchall()
+        if not rows or len(rows) < steps:
+            return None
+
+        last = rows[-steps:]
+        temps, hums, flams, tvocs, cos = zip(*last)
+        return {
+            "temperature": [float(x) if x is not None else 0.0 for x in temps],
+            "humidity": [float(x) if x is not None else 0.0 for x in hums],
+            "flammable": [float(x) if x is not None else 0.0 for x in flams],
+            "tvoc": [float(x) if x is not None else 0.0 for x in tvocs],
+            "co": [float(x) if x is not None else 0.0 for x in cos],
+        }
+
+    except Exception:
+        logger.debug("Unable to read cached predictive table", exc_info=True)
+        return None
+
+    finally:
+        try:
+            if cursor is not None:
+                cursor.close()
+        except Exception:
+            logger.debug("Error closing cursor", exc_info=True)
+        # Keep thread-local connection open for reuse; do not close here.
+        pass
+
+
+def build_forecasts(rows, forecast_steps: int) -> dict:
+    """Given DB rows and forecast_steps, return dict of forecast arrays (lists)."""
+    import time
+    build_start = time.time()
+    
+    if not rows:
+        return {"error": "no data"}
+    
+    series_convert_start = time.time()
+    (temperature_data, humidity_data, flammable_data, tvoc_data, co_data) = series_from_rows(rows)
+    series_convert_elapsed = time.time() - series_convert_start
+    logger.info("Series conversion time: %.2fs", series_convert_elapsed)
+
+    series_map = {
+        "temperature": temperature_data,
+        "humidity": humidity_data,
+        "flammable": flammable_data,
+        "tvoc": tvoc_data,
+        "co": co_data,
+    }
+
+    forecasts = {}
+
+    # Parallelize per-series forecasting to speed up live responses.
+    # Use ThreadPoolExecutor because heavy numeric libraries typically release the GIL.
+    timeout_seconds = 30
+    max_workers = min(5, len(series_map))
+    
+    with ThreadPoolExecutor(max_workers=max_workers) as ex:
+        # Pre-warm worker threads' DB connections so the first model tasks don't pay thread-connection cost.
+        warm_start = time.time()
+        warm_futures = [ex.submit(_get_thread_conn) for _ in range(max_workers)]
+        # Wait for warmers to complete (best-effort)
+        warm_completed = 0
+        for wf in as_completed(warm_futures, timeout=timeout_seconds):
+            try:
+                wf.result()
+                warm_completed += 1
+            except Exception:
+                # ignore warm failures; real tasks will recreate connections on demand
+                logger.debug("Worker warm-up failed", exc_info=True)
+        warm_elapsed = time.time() - warm_start
+        logger.info("Executor warm-up time: %.2fs (completed %d/%d)", warm_elapsed, warm_completed, max_workers)
+
+        # Submit actual forecasting tasks
+        logger.info("Submitting forecasting tasks for %d series with forecast_steps=%d", len(series_map), forecast_steps)
+        submit_start = time.time()
+        future_map = {ex.submit(fit_forecast, series, forecast_steps): name for name, series in series_map.items()}
+        submit_elapsed = time.time() - submit_start
+        logger.info("Task submission time: %.2fs", submit_elapsed)
+        
+        # Wait for results
+        results_start = time.time()
+        for fut in as_completed(future_map, timeout=timeout_seconds * len(future_map)):
+            name = future_map[fut]
+            try:
+                arr = fut.result(timeout=timeout_seconds)
+                forecasts[name] = [float(x) for x in arr]
+                logger.info("Received forecast for %s", name)
+            except Exception as exn:
+                logger.warning("Forecast for %s failed or timed out: %s", name, exn)
+                # Simple persistence fallback: repeat last observed value
+                last_val = None
+                try:
+                    s = series_map[name]
+                    last_val = float(s[-1]) if len(s) > 0 and np.isfinite(s[-1]) else 0.0
+                except Exception:
+                    last_val = 0.0
+                forecasts[name] = [last_val] * forecast_steps
+        results_elapsed = time.time() - results_start
+        logger.info("Results collection time: %.2fs", results_elapsed)
+
+    total_build_time = time.time() - build_start
+    logger.info("Total build_forecasts() time: %.2fs", total_build_time)
+    return forecasts
+
+
+def _parse_days_from_req(req_body: dict, query_days: Optional[str]) -> Optional[float]:
+    """Parse a float `days` from JSON body or query string. Returns None if missing/invalid."""
+    if query_days is not None:
+        return float(query_days)
+    if req_body and "days" in req_body:
+        return float(req_body["days"])
+    
+
+
+
+def main(days : float) -> Tuple[int, dict]:
+    """HTTP-style entry point compatible with Azure Functions `main(req: func.HttpRequest)`.
+
+    Returns a tuple of (status_code, response_json).
+    This helper avoids hard dependency on azure.functions for easier local testing.
+    """
+    import time
+    main_start = time.time()
+    
+    if days is None:
+        return 401, {"error": "missing or invalid 'days' parameter; provide a float via query ?days= or JSON body {\"days\": 1.5}"}
+
+    if days <= 0:
+        return 402, {"error": "'days' must be a positive number"}
+    
+    if days != int(days):
+        return 403, {"error": "'days' must be an integer value"}
+
+    # Compute forecast steps (96 per day)
+    forecast_steps = math.ceil(days * 96)
+
+    # Fast path: cached predictions in `iotdatatablepredictive` only represent
+    # the next 24 hours (day 1). Use cached fast-path only when the request is
+    # exactly for 1 day (96 steps). For multi-day requests we must run live
+    # modeling so the returned day corresponds to the requested day offset.
+    if forecast_steps == 96:
+        cache_start = time.time()
+        cached = _get_cached_forecasts(forecast_steps)
+        cache_elapsed = time.time() - cache_start
+        logger.info("Cache lookup time: %.2fs", cache_elapsed)
+        if cached is not None:
+            # Return cached forecasts immediately (fast for mobile clients)
+            response = {
+                "days_requested": days,
+                "interval_minutes": 15,
+                "returned_steps": forecast_steps,
+                "forecasts": cached,
+                "cached": True,
+            }
+            total_time = time.time() - main_start
+            logger.info("Total main() time (cached path): %.2fs", total_time)
+            return 200, response
+
+    # No cached forecasts available or insufficient rows; do live modeling
+    logger.info("Entering live modeling path for day=%s (forecast_steps=%d)", days, forecast_steps)
+    
+    fetch_start = time.time()
+    rows, err = _connect_and_fetch()
+    fetch_elapsed = time.time() - fetch_start
+    logger.info("Fetch sensor data time: %.2fs (rows=%d)", fetch_elapsed, len(rows) if rows else 0)
+    
+    if err is not None:
+        return 501, {"error": "failed to fetch sensor data", "details": str(err)}
+
+    build_start = time.time()
+    forecasts = build_forecasts(rows, forecast_steps)
+    build_elapsed = time.time() - build_start
+    logger.info("Build forecasts time: %.2fs", build_elapsed)
+    
+    if "error" in forecasts:
+        return 502, {"error": "no sensor data available to model"}
+
+    # Only return the forecasts corresponding to the last day requested (last 96 steps)
+    day_steps = 96
+    sliced = {}
+    for key, values in forecasts.items():
+        sliced[key] = values[-day_steps:] if len(values) >= day_steps else values
+
+    response = {
+        "days_requested": days,
+        "interval_minutes": 15,
+        "returned_steps": len(next(iter(sliced.values()))) if sliced else 0,
+        "forecasts": sliced,
+    }
+    
+    total_time = time.time() - main_start
+    logger.info("Total main() time (live path): %.2fs", total_time)
+
+    return 200, response
+
+# Entry point for the script
+if __name__ == "__main__":
+    # CLI fallback: accept days as first arg or default to 1 day
+    import json
+
+    days_arg = None
+    if len(sys.argv) > 1:
+        try:
+            days_arg = float(sys.argv[1])
+        except Exception:
+            days_arg = None
+
+    request_obj = {"body": {}}
+    if days_arg is not None:
+        request_obj["body"]["days"] = days_arg
+    else:
+        # default for quick local runs
+        request_obj["body"]["days"] = 1.0
+
+    days_value = request_obj["body"]["days"]
+    status, resp = main(days_value)
+    print(f"Status: {status}\n")
+    print(json.dumps(resp, indent=2))
