@@ -27,6 +27,10 @@
 #include "driver/i2c.h"
 #include "i2c_config.h"
 
+#include "esp_sleep.h"
+
+#include "esp_timer.h"
+
 // #include "driver/i2c_master.h"
 
 // #include "esp_driver/i2c.h"
@@ -481,23 +485,91 @@ uint32_t ulHandleCommand( AzureIoTHubClientCommandRequest_t * pxMessage,
 }
 /*-----------------------------------------------------------*/
 
+// MY CODE BEGINS HERE
+
+
+
+float calculate_soc(float vcell) {
+    float soc = 0;
+    if (vcell >= 4.1617) {
+        soc = 100;
+    }
+    else if (vcell >= 4.0913) {
+        soc = 95.03;
+    }
+    else if (vcell >= 4.0749) {
+        soc = 90.07;
+    }
+    else if (vcell >= 4.0606) {
+        soc = 85.10;
+    }
+    else if (vcell >= 4.0153) {
+        soc = 80.13;
+    }
+    else if (vcell >= 3.9592) {
+        soc = 75.17;
+    }
+    else if (vcell >= 3.9164) {
+        soc = 70.20;
+    }
+    else if (vcell >= 3.8587) {
+        soc = 65.24;
+    }
+    else if (vcell >= 3.8163) {
+        soc = 60.27;
+    }
+    else if (vcell >= 3.7535) {
+        soc = 55.30;
+    }
+    else if (vcell >= 3.7317) {
+        soc = 50.34;
+    }
+    else if (vcell >= 3.6892) {
+        soc = 45.37;
+    }
+    else if (vcell >= 3.6396) {
+        soc = 40.40;
+    }
+    else if (vcell >= 3.5677) {
+        soc = 35.43;
+    }
+    else if (vcell >= 3.5208) {
+        soc = 30.46;
+    }
+    else if (vcell >= 3.4712) {
+        soc = 25.40;
+    }
+    else if (vcell >= 3.386) {
+        soc = 20.53;
+    }
+    else if (vcell >= 3.288) {
+        soc = 15.56;
+    }
+    else if (vcell >= 3.2017) {
+        soc = 10.59;
+    }
+    else if (vcell >= 3.0747) {
+        soc = 5.63;
+    }
+    else {
+        soc = 0;
+    }
+
+    return soc;
+
+}
 
 // PPM CURVE CONSTANTS - general form RsR0 = Ax^k 
-// CO: A = 19.5, k = -0.43
-
-
+// flammable gas: A = 19.5, k = -0.43
+// CO: A = 24.9, k = -0.7
 
 
 
 
 #include <math.h>
-
 float ppm_curve(float A, float k, float y) {
-
-    float x = pow((y / A), (1 / k));
-
+    float x = pow((y / A), (1 / k)); // solve for gas concentration x
     return x; // ppm
-
 }
 
 #define MQ2TAG "MQ2_SENSOR"
@@ -505,18 +577,17 @@ float ppm_curve(float A, float k, float y) {
 #define TAG_RSOC "TAG_RSOC"
 #define TVOC_TAG "TVOC_TAG"
 
+
+
+// read sensor a_out voltage
 int analog_read(adc_oneshot_unit_handle_t adc_handle, adc_channel_t sensor) {
     int raw = 0;
-    adc_oneshot_read(adc_handle, sensor, &raw);
-
-    // ESP_LOGI(MQ2TAG, "MQ2 raw analog output: %d", raw);
+    adc_oneshot_read(adc_handle, sensor, &raw); // get raw adc value 
 
     int voltageMV = 0;
 
-    adc_cali_raw_to_voltage(adc1_cali_handle, raw,&voltageMV);
-
+    adc_cali_raw_to_voltage(adc1_cali_handle, raw,&voltageMV); // convert raw value to calibrated voltage
     return voltageMV;
-
 }
 
 
@@ -540,48 +611,25 @@ uint32_t ulCreateTelemetry( uint8_t * pucTelemetryData,
     float R0 = 1000; //ohms
 
 
-
-
-    // ANALOG READ AND CALIBRATE MQ2 Aout
-    int MQ2Aout = analog_read(adc1_handle, MQ2);
-
-    // ESP_LOGI(MQ2TAG, "MQ2 calibrated analog output (mv): %d", MQ2Aout);
-
-
+    // get MQ2 flammable gas sensor value //
+    int MQ2Aout = analog_read(adc1_handle, MQ2); // get calibrated a_out voltage 
     float MQ2Aoutf = (float)MQ2Aout / 1000.0; // mv to V 
-
-    // ESP_LOGI(MQ2TAG, "MQ2 calibrated analog output (V): %0.2f", MQ2Aoutf);
-
-
-
-    float Rs = ((Vc - MQ2Aoutf) * RL) / MQ2Aoutf;
-
-    // ESP_LOGI(MQ2TAG, "Rs: %0.2f", Rs);
+    float Rs = ((Vc - MQ2Aoutf) * RL) / MQ2Aoutf; // get Rs resistance 
+    float y = Rs / R0; // resistance ratio (y value on characteristic curve)
+    float flammableGases = ppm_curve(19.5, -0.43, y); // plug resistance ratio into characteristic curve
 
 
-
-    float y = Rs / R0;
-
-    // ESP_LOGI(MQ2TAG, "Y calculation: %0.2f", y);
-
-    float flammableGases = ppm_curve(19.5, -0.43, y);
 
     ESP_LOGI(MQ2TAG, "flammable gas (ppm): %0.2f", flammableGases);
 
 
-    //////////////////////
-
-    int MQ7Aout = analog_read(adc1_handle, MQ7);
-
+    // get MQ7 CO sensor value //
+    int MQ7Aout = analog_read(adc1_handle, MQ7); // get calibrated a_out voltage 
     float MQ7Aoutf = (float)MQ7Aout / 1000.0; // mv to V 
+    float Rs2 = ((Vc - MQ7Aoutf) * RL) / MQ7Aoutf; // get Rs resistance 
+    float y2 = Rs2 / R0; // resistance ratio (y value on characteristic curve)
+    float co = ppm_curve(24.9, -0.7, y2); // plug resistance ratio into characteristic curve
 
-    float Rs2 = ((Vc - MQ7Aoutf) * RL) / MQ7Aoutf;
-
-    float y2 = Rs2 / R0;
-
-    float co = ppm_curve(19.5, -0.43, y2);
-
-    // ESP_LOGI(MQ7TAG, "MQ7 calibrated analog output (mv): %d", MQ7Aout);
 
     ESP_LOGI(MQ7TAG, "co (ppm): %0.2f", co);
 
@@ -592,33 +640,90 @@ uint32_t ulCreateTelemetry( uint8_t * pucTelemetryData,
 
 
     // Example placeholder values for now
-    float temperature = 0.0f;     // Celsius
+    float temperature = 100.0f;     // Celsius
     float humidity = 50.0f;        // %
     // float flammableGases = 120.0f; // ppm or arbitrary unit
-    float tvoc = 0.0f;            // mg/m³ or arbitrary unit
+    float tvoc = 100.0f;            // mg/m³ or arbitrary unit
     // float co = MQ2Aout;               // ppm
 
-    // i2c read temp humidity 
 
-    esp_err_t ret = sensor_read(&temperature, &humidity);
-    if (ret == ESP_OK) {
-        ESP_LOGI("ADAFRUIT_SENSOR", "Temperature: %.2f °C, Humidity: %.2f %%", temperature, humidity);
-    } else {
-        ESP_LOGE("ADA_FRUIT_SENSOR", "Failed to read sensor");
+
+
+
+    // i2c read temp humidity
+    // calculate averages
+    
+    // make containers
+    float temp_values[10];
+    float humidity_values[10];
+
+    // average of 10 measurements
+    for (int i = 0; i < 10; i++) {
+
+        esp_err_t ret = read_TH(&temperature, &humidity);
+        if (ret == ESP_OK) {
+        } else {
+            ESP_LOGE("ADA_FRUIT_SENSOR", "Failed to read sensor");
+        }
+        // fill containers 
+        temp_values[i] = temperature;
+        humidity_values[i] = humidity;
+
+        vTaskDelay(pdMS_TO_TICKS(100));
     }
- 
 
-    uint8_t rsoc;
+    float avg_temp = 0;
+    float avg_humidity = 0;
+
+    // take average of containers
+    for (int i = 0; i < 10; i++) {
+        avg_temp += temp_values[i] / 10;
+        avg_humidity += humidity_values[i] / 10;
+    }
+
+    temperature = avg_temp;
+    humidity = avg_humidity;
+
+    ESP_LOGI("ADAFRUIT_SENSOR", "Temperature: %.2f °C, Humidity: %.2f %%", temperature, humidity);
 
 
-    //if (bq27210_get_rsoc(&rsoc) == ESP_OK) {
-    //    ESP_LOGI(TAG_RSOC, "Battery RSOC: %d %%", rsoc);
-    //} else {
-    //    ESP_LOGE(TAG_RSOC, "Failed to read RSOC");
-    //}
 
 
-    esp_err_t tvoc_ret = read_tvoc(&tvoc);
+    float soc = 0.0f;
+    float soc_ocv = 0.0f;
+
+    float max_voltage = 3.5f;
+
+
+
+
+    float battery_voltage = 0.0f;
+
+    if (read_VCELL(&battery_voltage) == ESP_OK) {
+        // printf("Battery voltage: %.2f%%\n", battery_voltage);
+    } 
+    else {
+        printf("Failed to read battery voltage\n");
+    }
+
+    int64_t time_us = esp_timer_get_time();   // microseconds since boot
+    double time_s = time_us / 1e6;            // convert to seconds
+    printf("Uptime: %.3f seconds\n", time_s);
+
+    soc_ocv = calculate_soc(battery_voltage);
+
+    printf("Battery Life: %.2f%%\n", soc_ocv);
+    
+
+
+    // float batteryLife = (battery_voltage / max_voltage) * 100;
+
+    // printf("Battery charge: %.2f%%\n", batteryLife);
+
+
+
+
+    esp_err_t tvoc_ret = read_tvoc(&tvoc); // read tvoc
     if (tvoc_ret == ESP_OK) {
         ESP_LOGI(TVOC_TAG, "TVOC concentration: %.2f ppb", tvoc);
     } else {
@@ -629,16 +734,21 @@ uint32_t ulCreateTelemetry( uint8_t * pucTelemetryData,
 
 
 
-    // Format JSON with fields in required order
+
+
+
+    
     int result = snprintf((char *)pucTelemetryData, ulTelemetryDataSize,
                           "{"
                           "\"Temperature\":%.2f,"
                           "\"Humidity\":%.2f,"
                           "\"FlammableGases\":%.2f,"
                           "\"TVOC\":%.2f,"
-                          "\"CO\":%.2f"
+                          "\"CO\":%.2f,"
+                          "\"BatteryLife\":%.2f,"
+                          "\"VCELL\":%.2f"
                           "}",
-                          temperature, humidity, flammableGases, tvoc, co);
+                          temperature, humidity, flammableGases, tvoc, co, soc_ocv, battery_voltage);
 
     if( ( result >= 0 ) && ( result < ulTelemetryDataSize ) )
     {
@@ -649,8 +759,18 @@ uint32_t ulCreateTelemetry( uint8_t * pucTelemetryData,
     {
         result = 1;
     }
+    //T I M E 
+
+    // vTaskDelay(pdMS_TO_TICKS(1000 * 9));
+
+    // eeepyy sleepy sleepy
+
+    // esp_sleep_enable_timer_wakeup(30 * 1000000); // wake after 30 sec
+    // esp_light_sleep_start();
 
     return result;
+
+
 }
 /*-----------------------------------------------------------*/
 

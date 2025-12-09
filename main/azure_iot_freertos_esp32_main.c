@@ -82,6 +82,8 @@ static bool s_is_connected_to_internet = false;
 /*-----------------------------------------------------------*/
 
 extern void vStartDemoTask( void );
+
+
 /*-----------------------------------------------------------*/
 
 /**
@@ -314,6 +316,10 @@ static void initialize_time()
 }
 /*-----------------------------------------------------------*/
 
+
+
+
+
 void app_main( void )
 {
     init_adc(); // i added this
@@ -324,9 +330,13 @@ void app_main( void )
     /*Allow other core to finish initialization */
     vTaskDelay( pdMS_TO_TICKS( 100 ) );
 
+    
+
     ( void ) example_connect();
 
     initialize_time();
+
+
 
     vStartDemoTask();
 }

@@ -370,6 +370,9 @@ static void prvAzureDemoTask( void * pvParameters )
 
     for( ; ; )
     {
+        // ADD DELAY HERE
+        // vTaskDelay((30000 * 15) / portTICK_PERIOD_MS);
+
         if( xAzureSample_IsConnectedToInternet() )
         {
             /* Attempt to establish TLS session with IoT Hub. If connection fails,
@@ -445,7 +448,8 @@ static void prvAzureDemoTask( void * pvParameters )
             /* Publish messages with QoS1, send and process Keep alive messages. */
             for( ; xAzureSample_IsConnectedToInternet(); )
             {
-                /* Hook for sending Telemetry */
+                /* send telemetry and reported properties as before */
+                // vTaskDelay((30000 * 2) / portTICK_PERIOD_MS);
                 if( ( ulCreateTelemetry( ucScratchBuffer, sizeof( ucScratchBuffer ), &ulScratchBufferLength ) == 0 ) &&
                     ( ulScratchBufferLength > 0 ) )
                 {
@@ -455,7 +459,6 @@ static void prvAzureDemoTask( void * pvParameters )
                     configASSERT( xResult == eAzureIoTSuccess );
                 }
 
-                /* Hook for sending update to reported properties */
                 ulReportedPropertiesUpdateLength = ulCreateReportedPropertiesUpdate( ucReportedPropertiesUpdate, sizeof( ucReportedPropertiesUpdate ) );
 
                 if( ulReportedPropertiesUpdateLength > 0 )
@@ -464,14 +467,22 @@ static void prvAzureDemoTask( void * pvParameters )
                     configASSERT( xResult == eAzureIoTSuccess );
                 }
 
-                LogInfo( ( "Attempt to receive publish message from IoT Hub.\r\n" ) );
-                xResult = AzureIoTHubClient_ProcessLoop( &xAzureIoTHubClient,
-                                                         sampleazureiotPROCESS_LOOP_TIMEOUT_MS );
-                configASSERT( xResult == eAzureIoTSuccess );
 
-                /* Leave Connection Idle for some time. */
-                LogInfo( ( "Keeping Connection Idle...\r\n\r\n" ) );
-                vTaskDelay( sampleazureiotDELAY_BETWEEN_PUBLISHES_TICKS );
+                const uint32_t IDLE_TOTAL_MS = (15 * 1000 * 60); // delay for 15 minutes        
+                const uint32_t PROCESS_LOOP_SLICE_MS = 1000; // ping every second           
+
+                uint32_t ulElapsedMs = 0;
+
+                while((ulElapsedMs < IDLE_TOTAL_MS) && xAzureSample_IsConnectedToInternet()) // delay loop 
+                {
+                    xResult = AzureIoTHubClient_ProcessLoop(&xAzureIoTHubClient, // ping iothub
+                                                            sampleazureiotPROCESS_LOOP_TIMEOUT_MS);
+                    configASSERT(xResult == eAzureIoTSuccess);
+
+                    vTaskDelay(pdMS_TO_TICKS(PROCESS_LOOP_SLICE_MS)); // micro delay
+                    ulElapsedMs += PROCESS_LOOP_SLICE_MS; 
+                }
+
             }
 
             if( xAzureSample_IsConnectedToInternet() )
